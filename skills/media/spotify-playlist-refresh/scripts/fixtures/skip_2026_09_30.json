@@ -1,0 +1,520 @@
+{
+ "_about": "2026-09-30 real data: recently-played window (50 plays, with context) + the 40-track playlist written by the 03:00 refresh (run 1728) + the user's labels by playlist position. Used by scripts/test_skip_signals.py to replay the fallback inference.",
+ "playlist_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+ "day_start_ms": 1790697600000,
+ "version": {
+  "version_id": 1,
+  "applied_at": 1790708465549,
+  "tracks": [
+   "5yfhzEct1ulyU6g5oVRraj",
+   "4attgopd8pmrJ03fSDeOI2",
+   "6uosenLUNFZtOIih5T0qfV",
+   "7AsDyKh73X1dITS9WQ8ZBw",
+   "5S0QxfYABBoLI4sMk2aCa2",
+   "1pBUzZE9PoKLoPxo6QxsG6",
+   "2T9jFJm9xBdehACv1eZFvp",
+   "6ONjO8j2uE9Y9wPgbYR3fw",
+   "7B9W7Qsy5M2kyUNjQYIEG8",
+   "26YSv4NFDACPUKGX5Aj079",
+   "4IiZmwQIkApeVxHDujXJft",
+   "5jmNDZ27fyB10TmHsk7rtK",
+   "5SQvNdCt8nwz9VOhfpCt9a",
+   "0Gl9pXfGTU8eAnEbcka6AV",
+   "1eykKBqxHgasGHwjOQIvbt",
+   "7fdyRoKwRZ6K8Uz7U5yyL4",
+   "58LrWUfLf4BWdMx1PNPefc",
+   "3L9KMc8ImDXgDYKwdqq01V",
+   "1cpiT81rcWtbgtkTeq2RW0",
+   "7GDgpad2BQVuDUzaxHFakc",
+   "0dzbNEBsrs17os3jJOFLar",
+   "2cxcqKwQtfKq7giphxjzOu",
+   "1vvoCAUWVRBjCarEvB6Khd",
+   "28TmuZ5UPe2foJqqOijfOW",
+   "4ni36cZOQZldZGpHyLHFqX",
+   "5lH7FlYMKULfSxyMBsHgHJ",
+   "6sMyHIWhn17AHXZY3xXT6E",
+   "0mPYjKXaHYMPhtq0hCIkgn",
+   "04qiPs2ScJrI7hgQ8mz4im",
+   "6jmKdEzi3cJRPQDFHJOqJq",
+   "4e5OwyRhNsoLqGQYzfuV5B",
+   "5TwuIW1qLoLi7uutxsf4eR",
+   "26GehcyfHwgzfS0ok9yDYk",
+   "51FuwplhLFBSbdho3Y1Jki",
+   "25ujeTA1Ma2rYzxr7ozdrP",
+   "5A05GrtX9Qwkwv41HEK39N",
+   "2G6YoOQ063ZPI9JdLAru6u",
+   "1f4RhYlVS03MasdfqCLVmL",
+   "1LE3uF79DdTLiHlE8LWzDs",
+   "6h9892Uy68VZV2gtWTvd2n"
+  ],
+  "names": [
+   "KNOW ABOUT ME",
+   "Bittersweet",
+   "LOVE ATTACK",
+   "Carry On",
+   "SUPA DUPA LUV",
+   "Deja Vu",
+   "Starry Sea",
+   "Shapeshifter",
+   "DM",
+   "What You Waiting For",
+   "Say It",
+   "Lost in Proof",
+   "Supercrush",
+   "IYKYK",
+   "UNNATURAL",
+   "Chapter You",
+   "Tear Drop",
+   "XOXZ",
+   "In the Rain",
+   "LIKE THAT",
+   "IS THIS LOVE",
+   "晩餐歌 - Bansanka",
+   "LOCKED IN",
+   "Our Summer",
+   "MOON",
+   "Tears On My Pillow",
+   "So Yeah, LOVE!",
+   "ADORE U",
+   "GGBB",
+   "Reality Hurts",
+   "Chico malo",
+   "PS118",
+   "Pretty Girl",
+   "CAPPUCCINO - English Version",
+   "LIKE U 100",
+   "LLL",
+   "IZNA - Japanese Ver.",
+   "Mamma Mia - Japanese Ver.",
+   "H.O.W's Delight",
+   "BEEP BEEP"
+  ]
+ },
+ "events": [
+  {
+   "track_id": "0Gl9pXfGTU8eAnEbcka6AV",
+   "name": "IYKYK",
+   "played_at": 1790675871654,
+   "duration_ms": 180000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 180000
+  },
+  {
+   "track_id": "7GDgpad2BQVuDUzaxHFakc",
+   "name": "LIKE THAT",
+   "played_at": 1790676040503,
+   "duration_ms": 168358,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 168358
+  },
+  {
+   "track_id": "5yfhzEct1ulyU6g5oVRraj",
+   "name": "KNOW ABOUT ME",
+   "played_at": 1790676206767,
+   "duration_ms": 165773,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 165773
+  },
+  {
+   "track_id": "5jmNDZ27fyB10TmHsk7rtK",
+   "name": "Lost in Proof",
+   "played_at": 1790676369175,
+   "duration_ms": 154000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 154000
+  },
+  {
+   "track_id": "1404zSB6dqMIiStHLI7gg4",
+   "name": "Heavy Serenade",
+   "played_at": 1790676549665,
+   "duration_ms": 180000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 180000
+  },
+  {
+   "track_id": "5S0QxfYABBoLI4sMk2aCa2",
+   "name": "SUPA DUPA LUV",
+   "played_at": 1790676722725,
+   "duration_ms": 172573,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 172573
+  },
+  {
+   "track_id": "3L9KMc8ImDXgDYKwdqq01V",
+   "name": "XOXZ",
+   "played_at": 1790676877222,
+   "duration_ms": 154000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 154000
+  },
+  {
+   "track_id": "1cpiT81rcWtbgtkTeq2RW0",
+   "name": "In the Rain",
+   "played_at": 1790677046526,
+   "duration_ms": 168817,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 168817
+  },
+  {
+   "track_id": "58LrWUfLf4BWdMx1PNPefc",
+   "name": "Tear Drop",
+   "played_at": 1790677224157,
+   "duration_ms": 177142,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 177142
+  },
+  {
+   "track_id": "1vvoCAUWVRBjCarEvB6Khd",
+   "name": "LOCKED IN",
+   "played_at": 1790677878723,
+   "duration_ms": 181813,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181813
+  },
+  {
+   "track_id": "2cxcqKwQtfKq7giphxjzOu",
+   "name": "晩餐歌 - Bansanka",
+   "played_at": 1790678095074,
+   "duration_ms": 215853,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 215853
+  },
+  {
+   "track_id": "6uosenLUNFZtOIih5T0qfV",
+   "name": "LOVE ATTACK",
+   "played_at": 1790678277118,
+   "duration_ms": 181560,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181560
+  },
+  {
+   "track_id": "1pBUzZE9PoKLoPxo6QxsG6",
+   "name": "Deja Vu",
+   "played_at": 1790678461602,
+   "duration_ms": 184000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 184000
+  },
+  {
+   "track_id": "7B9W7Qsy5M2kyUNjQYIEG8",
+   "name": "DM",
+   "played_at": 1790678666374,
+   "duration_ms": 204293,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 204293
+  },
+  {
+   "track_id": "7hCdtQsaKCBXrITaPNK2iE",
+   "name": "White Memories",
+   "played_at": 1790678872508,
+   "duration_ms": 181000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181000
+  },
+  {
+   "track_id": "4ni36cZOQZldZGpHyLHFqX",
+   "name": "MOON",
+   "played_at": 1790724834569,
+   "duration_ms": 166040,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 166040
+  },
+  {
+   "track_id": "5yfhzEct1ulyU6g5oVRraj",
+   "name": "KNOW ABOUT ME",
+   "played_at": 1790725018018,
+   "duration_ms": 165773,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 165773
+  },
+  {
+   "track_id": "4attgopd8pmrJ03fSDeOI2",
+   "name": "Bittersweet",
+   "played_at": 1790725218568,
+   "duration_ms": 200089,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 200089
+  },
+  {
+   "track_id": "6uosenLUNFZtOIih5T0qfV",
+   "name": "LOVE ATTACK",
+   "played_at": 1790725400631,
+   "duration_ms": 181560,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181560
+  },
+  {
+   "track_id": "7AsDyKh73X1dITS9WQ8ZBw",
+   "name": "Carry On",
+   "played_at": 1790725575872,
+   "duration_ms": 174764,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 174764
+  },
+  {
+   "track_id": "5S0QxfYABBoLI4sMk2aCa2",
+   "name": "SUPA DUPA LUV",
+   "played_at": 1790726010439,
+   "duration_ms": 172573,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 172573
+  },
+  {
+   "track_id": "1pBUzZE9PoKLoPxo6QxsG6",
+   "name": "Deja Vu",
+   "played_at": 1790726194919,
+   "duration_ms": 184000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 184000
+  },
+  {
+   "track_id": "2T9jFJm9xBdehACv1eZFvp",
+   "name": "Starry Sea",
+   "played_at": 1790726381797,
+   "duration_ms": 186400,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 186400
+  },
+  {
+   "track_id": "6ONjO8j2uE9Y9wPgbYR3fw",
+   "name": "Shapeshifter",
+   "played_at": 1790726566766,
+   "duration_ms": 184477,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 184477
+  },
+  {
+   "track_id": "7B9W7Qsy5M2kyUNjQYIEG8",
+   "name": "DM",
+   "played_at": 1790726771520,
+   "duration_ms": 204293,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 204293
+  },
+  {
+   "track_id": "4IiZmwQIkApeVxHDujXJft",
+   "name": "Say It",
+   "played_at": 1790726991586,
+   "duration_ms": 184569,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 184569
+  },
+  {
+   "track_id": "5jmNDZ27fyB10TmHsk7rtK",
+   "name": "Lost in Proof",
+   "played_at": 1790727146062,
+   "duration_ms": 154000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 154000
+  },
+  {
+   "track_id": "5SQvNdCt8nwz9VOhfpCt9a",
+   "name": "Supercrush",
+   "played_at": 1790727320862,
+   "duration_ms": 174312,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 174312
+  },
+  {
+   "track_id": "0Gl9pXfGTU8eAnEbcka6AV",
+   "name": "IYKYK",
+   "played_at": 1790727501371,
+   "duration_ms": 180000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 180000
+  },
+  {
+   "track_id": "1cpiT81rcWtbgtkTeq2RW0",
+   "name": "In the Rain",
+   "played_at": 1790727683261,
+   "duration_ms": 168817,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 168817
+  },
+  {
+   "track_id": "7GDgpad2BQVuDUzaxHFakc",
+   "name": "LIKE THAT",
+   "played_at": 1790727852118,
+   "duration_ms": 168358,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 168358
+  },
+  {
+   "track_id": "0dzbNEBsrs17os3jJOFLar",
+   "name": "IS THIS LOVE",
+   "played_at": 1790728007686,
+   "duration_ms": 155080,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 155080
+  },
+  {
+   "track_id": "2cxcqKwQtfKq7giphxjzOu",
+   "name": "晩餐歌 - Bansanka",
+   "played_at": 1790728197961,
+   "duration_ms": 215853,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 190275
+  },
+  {
+   "track_id": "1vvoCAUWVRBjCarEvB6Khd",
+   "name": "LOCKED IN",
+   "played_at": 1790760235307,
+   "duration_ms": 181813,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181813
+  },
+  {
+   "track_id": "28TmuZ5UPe2foJqqOijfOW",
+   "name": "Our Summer",
+   "played_at": 1790760444351,
+   "duration_ms": 208544,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 208544
+  },
+  {
+   "track_id": "04qiPs2ScJrI7hgQ8mz4im",
+   "name": "GGBB",
+   "played_at": 1790760900867,
+   "duration_ms": 185786,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 185786
+  },
+  {
+   "track_id": "4e5OwyRhNsoLqGQYzfuV5B",
+   "name": "Chico malo",
+   "played_at": 1790761064790,
+   "duration_ms": 159053,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 159053
+  },
+  {
+   "track_id": "5A05GrtX9Qwkwv41HEK39N",
+   "name": "LLL",
+   "played_at": 1790761306926,
+   "duration_ms": 207306,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 207306
+  },
+  {
+   "track_id": "2G6YoOQ063ZPI9JdLAru6u",
+   "name": "IZNA - Japanese Ver.",
+   "played_at": 1790763535192,
+   "duration_ms": 156040,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 156040
+  },
+  {
+   "track_id": "1LE3uF79DdTLiHlE8LWzDs",
+   "name": "H.O.W's Delight",
+   "played_at": 1790763758102,
+   "duration_ms": 201521,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 201521
+  },
+  {
+   "track_id": "0QICKhP44TRnb4EurQ3tN9",
+   "name": "BILLIONAIRE",
+   "played_at": 1790763934852,
+   "duration_ms": 157179,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 157179
+  },
+  {
+   "track_id": "3wc2PoPGpb1vzM79AgitIh",
+   "name": "4 Flowers",
+   "played_at": 1790764135335,
+   "duration_ms": 200000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 200000
+  },
+  {
+   "track_id": "16iOs2f9G9qRknDgM9cfAw",
+   "name": "Who is she",
+   "played_at": 1790764299417,
+   "duration_ms": 159000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 159000
+  },
+  {
+   "track_id": "0cbgFMxCXMzs80R2vxwApT",
+   "name": "Dear my crazy soulmate",
+   "played_at": 1790764323768,
+   "duration_ms": 156000,
+   "context_uri": null,
+   "ms_played_db": 24351
+  },
+  {
+   "track_id": "49DTiFx70EuJLV7hDsCo6z",
+   "name": "WE GO UP",
+   "played_at": 1790764859953,
+   "duration_ms": 186973,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 186973
+  },
+  {
+   "track_id": "2pNJ0TsgiRc4mGdYHazD5w",
+   "name": "water color",
+   "played_at": 1790765065800,
+   "duration_ms": 189986,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 189986
+  },
+  {
+   "track_id": "6uosenLUNFZtOIih5T0qfV",
+   "name": "LOVE ATTACK",
+   "played_at": 1790765254110,
+   "duration_ms": 181560,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 181560
+  },
+  {
+   "track_id": "7AsDyKh73X1dITS9WQ8ZBw",
+   "name": "Carry On",
+   "played_at": 1790765429358,
+   "duration_ms": 174764,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 174764
+  },
+  {
+   "track_id": "5S0QxfYABBoLI4sMk2aCa2",
+   "name": "SUPA DUPA LUV",
+   "played_at": 1790765602392,
+   "duration_ms": 172573,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 172573
+  },
+  {
+   "track_id": "1pBUzZE9PoKLoPxo6QxsG6",
+   "name": "Deja Vu",
+   "played_at": 1790765786865,
+   "duration_ms": 184000,
+   "context_uri": "spotify:playlist:4y4Fd7Pg52Ubi0zqJBNJnm",
+   "ms_played_db": 184000
+  }
+ ],
+ "labels": {
+  "skip": [
+   10,
+   15,
+   16,
+   18,
+   25,
+   26,
+   27,
+   28,
+   32,
+   33,
+   34,
+   35,
+   37,
+   38,
+   40
+  ],
+  "maybe": [
+   30
+  ],
+  "not": [
+   17
+  ]
+ }
+}

@@ -1,0 +1,311 @@
+[
+  {
+    "id": "code-fix-script",
+    "skill": "coding-loop",
+    "weight": 40,
+    "prompt": "There is a file buggy.py in the current directory. It is meant to return the sum of squares of 1..n but has a bug. Read it, fix the bug, run it for n=10 using the terminal, and reply with ONLY the corrected result for n=10.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "buggy.py": "def sum_sq(n):\n    total = 0\n    for i in range(n):\n        total += i * i\n    return total\n\nif __name__ == '__main__':\n    print(sum_sq(10))\n"
+    },
+    "verify": {
+      "type": "numeric",
+      "expected": 385,
+      "tol": 0
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "jq-extract-debug",
+    "skill": "coding-loop",
+    "weight": 15,
+    "prompt": "The file api.json holds an API response. Using the terminal (jq or python), extract lots_available for carpark_number TM3 and reply with ONLY that number.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "api.json": "{\"items\":[{\"timestamp\":\"2026-06-03T08:00:00+08:00\",\"carpark_data\":[{\"carpark_number\":\"TM3\",\"total_lots\":\"450\",\"lots_available\":\"45\",\"lot_type\":\"C\"},{\"carpark_number\":\"TH1\",\"total_lots\":\"300\",\"lots_available\":\"0\",\"lot_type\":\"C\"}]}]}"
+    },
+    "verify": {
+      "type": "numeric",
+      "expected": 45,
+      "tol": 0
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "csv-aggregate",
+    "skill": "coding-loop",
+    "weight": 20,
+    "prompt": "The file spend.csv has columns: date,merchant,category,amount. Using the terminal/python, compute the TOTAL amount for category 'groceries' and reply with ONLY the number (2 decimal places).",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "spend.csv": "date,merchant,category,amount\n2026-06-01,NTUC,groceries,12.50\n2026-06-01,GRAB,transport,8.20\n2026-06-02,COLD STORAGE,groceries,30.00\n2026-06-02,STARBUCKS,dining,6.80\n2026-06-03,NTUC,groceries,7.50\n"
+    },
+    "verify": {
+      "type": "numeric",
+      "expected": 50.0,
+      "tol": 0.01
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "txn-count-merchant",
+    "skill": "cc-bill-review",
+    "weight": 6,
+    "prompt": "The file txns.csv has columns: date,merchant,amount. How many transactions are with merchant JUNGSUNG, and what is their total amount? Reply as: count=<N> total=<amount>.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "txns.csv": "date,merchant,amount\n2026-05-02,JUNGSUNG,18.00\n2026-05-04,DAISO,3.20\n2026-05-09,JUNGSUNG,22.50\n2026-05-11,NTUC,9.10\n2026-05-20,JUNGSUNG,15.00\n"
+    },
+    "verify": {
+      "type": "contains",
+      "must_include": [
+        "3",
+        "55.5"
+      ]
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "token-usage-report",
+    "skill": "token-usage",
+    "weight": 35,
+    "prompt": "The file usage.jsonl has one JSON object per line: {\"day\":\"YYYY-MM-DD\",\"model\":\"...\",\"tokens\":N}. Using the terminal/python, produce a short report with (a) total tokens, (b) tokens per model, (c) tokens per day. Output as plain text with those three sections.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "usage.jsonl": "{\"day\":\"2026-06-01\",\"model\":\"MiniMax-M2.7\",\"tokens\":1200}\n{\"day\":\"2026-06-01\",\"model\":\"mimo-v2.5\",\"tokens\":800}\n{\"day\":\"2026-06-02\",\"model\":\"MiniMax-M2.7\",\"tokens\":1500}\n{\"day\":\"2026-06-02\",\"model\":\"mimo-v2.5\",\"tokens\":500}\n"
+    },
+    "verify": {
+      "type": "contains",
+      "must_include": [
+        "4000",
+        "2700",
+        "1300",
+        "2000"
+      ]
+    },
+    "timeout_s": 200,
+    "max_iter": 16
+  },
+  {
+    "id": "nearest-carparks",
+    "skill": "maps",
+    "weight": 7,
+    "prompt": "The file carparks.json is a JSON list of objects with keys distance_km and available_lots. Return the 3 NEAREST carparks that have at least 1 available lot, sorted by distance ascending. Output a markdown table with columns: # | distance_km | available_lots.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "carparks.json": "[{\"distance_km\":0.9,\"available_lots\":0},{\"distance_km\":0.3,\"available_lots\":45},{\"distance_km\":0.5,\"available_lots\":120},{\"distance_km\":0.2,\"available_lots\":0},{\"distance_km\":0.7,\"available_lots\":12},{\"distance_km\":1.1,\"available_lots\":5}]"
+    },
+    "verify": {
+      "type": "ordered_values",
+      "must_include_in_order": [
+        "0.3",
+        "0.5",
+        "0.7"
+      ]
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "brief-select-news",
+    "skill": "morning-brief",
+    "weight": 46,
+    "prompt": "The file news.json is a list of items with keys title and score. Produce a 'Top 3' morning brief: select the 3 highest-score items, and output a markdown numbered list of their titles in descending score order. No commentary.",
+    "toolsets": [
+      "terminal",
+      "code_execution",
+      "file"
+    ],
+    "fixtures": {
+      "news.json": "[{\"title\":\"Chip export rules tighten\",\"score\":71},{\"title\":\"Local transit fares to rise\",\"score\":88},{\"title\":\"New hawker centre opens\",\"score\":40},{\"title\":\"Rate cut expected\",\"score\":95},{\"title\":\"Heatwave advisory\",\"score\":63}]"
+    },
+    "verify": {
+      "type": "ordered_values",
+      "must_include_in_order": [
+        "Rate cut expected",
+        "Local transit fares to rise",
+        "Chip export rules tighten"
+      ]
+    },
+    "timeout_s": 180,
+    "max_iter": 14
+  },
+  {
+    "id": "email-triage-json",
+    "skill": "email-gmail-triage",
+    "weight": 12,
+    "prompt": "Classify each email below into category (one of: action_required, fyi, promotion) and priority (high/med/low). Return ONLY a JSON array of objects {subject, category, priority}.\n\n1. Subject: 'URGENT: Server invoice overdue - action needed today'\n2. Subject: '50% off all shoes this weekend!'\n3. Subject: 'FYI: team lunch moved to 1pm'\n4. Subject: 'Your password was reset'",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "json_array_check",
+      "min_len": 4,
+      "any_object_has": {
+        "category": "action_required",
+        "priority": "high"
+      }
+    },
+    "timeout_s": 150,
+    "max_iter": 10
+  },
+  {
+    "id": "statement-extract-json",
+    "skill": "cc-bill-review",
+    "weight": 6,
+    "prompt": "Extract from this transaction and return ONLY valid JSON with keys merchant_name, amount (number), date (YYYY-MM-DD), category (one of dining, transport, shopping, groceries, utilities, other).\n\nTransaction: 'DBS POSB DEBIT CARD PURCHASE NTUC FAIRPRICE SINGAPORE SG 12.50 SGD ON 01/JUN'",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "json_fields",
+      "expect": {
+        "amount": 12.5,
+        "category": "groceries",
+        "date": "2026-06-01"
+      },
+      "contains_field_substr": {
+        "merchant_name": "ntuc"
+      }
+    },
+    "timeout_s": 150,
+    "max_iter": 10
+  },
+  {
+    "id": "commute-decision",
+    "skill": "sg-commute",
+    "weight": 36,
+    "prompt": "It is 7:30am. I must arrive by 9:00am. Options: MRT ~55 min, Bus ~65 min (with transfer), Driving ~25 min but ERP $3 applies at 8am, Walking ~2 hours. Recommend ONE option and justify briefly considering time buffer, cost, and reliability.",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "regex",
+      "pattern": "(?i)\\b(mrt|driv)"
+    },
+    "timeout_s": 150,
+    "max_iter": 10
+  },
+  {
+    "id": "food-recommend",
+    "skill": "food-recommender",
+    "weight": 5,
+    "prompt": "My recent orders (cuisine): Korean, Korean, Japanese, Korean. Candidate nearby restaurants: A='Seoul Garden' (Korean), B='Pasta House' (Italian), C='Sushi Bar' (Japanese). Recommend ONE for tonight and explain in 1-2 sentences based on my history. State the restaurant name.",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "regex",
+      "pattern": "(?i)(seoul garden|korean)"
+    },
+    "timeout_s": 150,
+    "max_iter": 10
+  },
+  {
+    "id": "concise-answer",
+    "skill": "instruction-following",
+    "weight": 10,
+    "prompt": "In 50 words or fewer and with no preamble, explain the difference between a credit card statement balance and current balance.",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "word_limit",
+      "max_words": 55,
+      "no_filler": true
+    },
+    "timeout_s": 120,
+    "max_iter": 6
+  },
+  {
+    "id": "markdown-table",
+    "skill": "instruction-following",
+    "weight": 10,
+    "prompt": "Format as a markdown table with columns: # | Name | Live. Rows (number from 1): HDB TM3 (live data), URA Mall (static data), HDB Hub (live data). Live column = Y for live data, N for static. Output ONLY the table, no other text.",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "markdown_table",
+      "require_cells": [
+        "Y",
+        "N"
+      ]
+    },
+    "timeout_s": 120,
+    "max_iter": 6
+  },
+  {
+    "id": "sg-knowledge",
+    "skill": "domain-knowledge",
+    "weight": 5,
+    "prompt": "One line each: (1) Which MRT line is Pasir Ris station on? (2) What does ERP stand for? (3) Are HDB carparks generally 24-hour accessible?",
+    "toolsets": [
+      "terminal",
+      "code_execution"
+    ],
+    "verify": {
+      "type": "contains",
+      "must_include": [
+        "East-West",
+        "Electronic Road Pricing"
+      ]
+    },
+    "timeout_s": 120,
+    "max_iter": 6
+  },
+  {
+    "id": "skill-routing-token",
+    "skill": "skills-routing",
+    "weight": 15,
+    "prompt": "I want to generate my weekly token usage report. Find and open the most relevant installed skill for this, then briefly summarise the steps it prescribes.",
+    "toolsets": [
+      "skills",
+      "terminal",
+      "file"
+    ],
+    "verify": {
+      "type": "skill_loaded",
+      "expect_any": [
+        "token-usage",
+        "token_usage"
+      ]
+    },
+    "timeout_s": 200,
+    "max_iter": 14
+  }
+]

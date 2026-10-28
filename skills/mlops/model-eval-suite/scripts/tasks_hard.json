@@ -1,0 +1,101 @@
+[
+  {
+    "id": "debug-failing-tests",
+    "skill": "coding-loop",
+    "weight": 40,
+    "prompt": "This directory has calc.py and test_calc.py. Run the test suite with `python -m unittest`. Some tests fail due to a bug in calc.py. Fix calc.py so ALL tests pass, re-run, and reply with ONLY the number of tests that pass.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "calc.py": "def median(nums):\n    s = sorted(nums)\n    n = len(s)\n    return s[n // 2]\n",
+      "test_calc.py": "import unittest\nfrom calc import median\n\nclass T(unittest.TestCase):\n    def test_odd(self): self.assertEqual(median([3,1,2]), 2)\n    def test_even(self): self.assertEqual(median([1,2,3,4]), 2.5)\n    def test_two(self): self.assertEqual(median([10,20]), 15)\n    def test_neg(self): self.assertEqual(median([-1,-3,-2]), -2)\n    def test_single(self): self.assertEqual(median([7]), 7)\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    },
+    "verify": {"type": "numeric", "expected": 5, "tol": 0},
+    "timeout_s": 260, "max_iter": 22
+  },
+  {
+    "id": "multi-file-join",
+    "skill": "coding-loop",
+    "weight": 20,
+    "prompt": "Join orders.csv (order_id,product,qty) with products.csv (product,price) on product. Compute total revenue = sum of qty*price across all orders. Reply with ONLY the total to 2 decimal places.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "orders.csv": "order_id,product,qty\nA,apple,3\nB,banana,2\nC,apple,1\nD,cherry,5\n",
+      "products.csv": "product,price\napple,1.50\nbanana,0.75\ncherry,2.00\n"
+    },
+    "verify": {"type": "numeric", "expected": 17.50, "tol": 0.01},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "log-error-analysis",
+    "skill": "coding-loop",
+    "weight": 15,
+    "prompt": "In app.log, count how many lines are at ERROR level AND mention the service 'auth'. Reply as: count=<N>",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "app.log": "INFO auth user login ok\nWARN cache miss\nERROR auth token expired\nINFO billing charge ok\nERROR billing gateway timeout\nERROR auth invalid signature\nINFO auth logout\nWARN auth slow response\nERROR payments declined\nERROR auth session revoked\nINFO scheduler tick\nDEBUG auth trace\n"
+    },
+    "verify": {"type": "regex", "pattern": "(?i)count\\s*=\\s*3\\b"},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "multi-step-transform",
+    "skill": "coding-loop",
+    "weight": 20,
+    "prompt": "From numbers.txt (one integer per line): keep only the EVEN numbers, square each, and sum the squares. Reply with ONLY the final integer.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "numbers.txt": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n"
+    },
+    "verify": {"type": "numeric", "expected": 364, "tol": 0},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "recover-crashing-script",
+    "skill": "error-recovery",
+    "weight": 25,
+    "prompt": "Run process.py. It crashes with an error. Diagnose the traceback, fix the script so it runs successfully, re-run it, and reply with ONLY its correct numeric output.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "process.py": "def main():\n    values = [1, 2, 3, 4, 5]\n    total = sum(v * v for v in values)\n    print(reslt)\n\nif __name__ == '__main__':\n    main()\n"
+    },
+    "verify": {"type": "numeric", "expected": 55, "tol": 0},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "malformed-json-repair",
+    "skill": "error-recovery",
+    "weight": 15,
+    "prompt": "Read config.json and report the value of the 'max_retries' field. The file has a formatting error that breaks standard JSON parsing — repair it as needed. Reply with ONLY the value.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "config.json": "{\n  \"timeout\": 30,\n  \"max_retries\": 5,\n}\n"
+    },
+    "verify": {"type": "numeric", "expected": 5, "tol": 0},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "empty-result-edge",
+    "skill": "robustness",
+    "weight": 10,
+    "prompt": "From sales.csv (date,category,amount), compute the TOTAL amount for category 'electronics'. Reply with ONLY the number to 2 decimal places.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "sales.csv": "date,category,amount\n2026-06-01,groceries,12.50\n2026-06-01,transport,8.20\n2026-06-02,dining,30.00\n2026-06-02,groceries,7.50\n"
+    },
+    "verify": {"type": "numeric", "expected": 0, "tol": 0},
+    "timeout_s": 240, "max_iter": 20
+  },
+  {
+    "id": "csv-schema-mismatch",
+    "skill": "error-recovery",
+    "weight": 15,
+    "prompt": "Run sum_amounts.py to total the amounts in data.csv. It fails with an error. Diagnose why, fix the script, re-run, and reply with ONLY the total to 2 decimal places.",
+    "toolsets": ["terminal", "code_execution", "file"],
+    "fixtures": {
+      "data.csv": "id,amt,category\n1,10.00,a\n2,5.50,b\n3,4.50,a\n",
+      "sum_amounts.py": "import csv\n\ntotal = 0.0\nwith open('data.csv') as f:\n    for row in csv.DictReader(f):\n        total += float(row['amount'])\nprint(f\"{total:.2f}\")\n"
+    },
+    "verify": {"type": "numeric", "expected": 20.00, "tol": 0.01},
+    "timeout_s": 240, "max_iter": 20
+  }
+]

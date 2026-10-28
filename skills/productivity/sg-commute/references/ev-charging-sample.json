@@ -1,0 +1,93 @@
+{
+  "value": {
+    "evLocationsData": [
+      {
+        "address": "2 FUSIONOPOLIS WAY SINGAPORE 138634",
+        "name": "INNOVIS",
+        "longitude": 103.788698,
+        "latitude": 1.298426,
+        "locationId": "788698138634",
+        "status": "",
+        "chargingPoints": [
+          {
+            "status": "1",
+            "operatingHours": "",
+            "operator": "COMFORTDELGRO ENGIE PTE. LTD.",
+            "position": "B3 145",
+            "name": "INNOVIS",
+            "id": "",
+            "plugTypes": [
+              {
+                "plugType": "Type 2",
+                "powerRating": "AC",
+                "chargingSpeed": "22",
+                "price": "",
+                "priceType": "",
+                "evIds": [
+                  {"id": "", "evCpId": "R102014C-002", "status": ""},
+                  {"id": "", "evCpId": "R102014C-001", "status": ""},
+                  {"id": "", "evCpId": "R102015G-002", "status": ""},
+                  {"id": "", "evCpId": "R102015G-001", "status": ""}
+                ]
+              }
+            ]
+          },
+          {
+            "status": "1",
+            "operatingHours": "",
+            "operator": "COMFORTDELGRO ENGIE PTE. LTD.",
+            "position": "B3 146",
+            "name": "INNOVIS",
+            "id": "",
+            "plugTypes": [
+              {
+                "plugType": "Type 2",
+                "powerRating": "AC",
+                "chargingSpeed": "22",
+                "price": "",
+                "priceType": "",
+                "evIds": []
+              }
+            ]
+          },
+          {
+            "status": "1",
+            "operatingHours": "",
+            "operator": "COMFORTDELGRO ENGIE PTE. LTD.",
+            "position": "B3 147",
+            "name": "INNOVIS",
+            "id": "",
+            "plugTypes": [
+              {
+                "plugType": "Type 2",
+                "powerRating": "AC",
+                "chargingSpeed": "22",
+                "price": "",
+                "priceType": "",
+                "evIds": []
+              }
+            ]
+          },
+          {
+            "status": "1",
+            "operatingHours": "",
+            "operator": "COMFORTDELGRO ENGIE PTE. LTD.",
+            "position": "B3 144",
+            "name": "INNOVIS",
+            "id": "",
+            "plugTypes": [
+              {
+                "plugType": "Type 2",
+                "powerRating": "AC",
+                "chargingSpeed": "22",
+                "price": "",
+                "priceType": "",
+                "evIds": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

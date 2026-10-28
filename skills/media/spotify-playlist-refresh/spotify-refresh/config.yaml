@@ -1,0 +1,268 @@
+# config.yaml — all tunable parameters for Spotify playlist refresh
+# See: spec §11
+
+spotify:
+  # NOT read by any code (reference only): client_id / redirect_uri are hardcoded
+  # in src/auth.py (client_id overridable via SPOTIFY_CLIENT_ID env var) and
+  # playlist_id is hardcoded as refresher.PLAYLIST_ID (+ the refresh wrapper's
+  # PLAYLIST_URL). Changing these values here has no effect.
+  client_id: "c3616d872c07443980727a2beef2e936"
+  # client_secret loaded from SPOTIFY_CLIENT_SECRET env var
+  redirect_uri: "http://127.0.0.1:8888/callback"
+  playlist_id: "4y4Fd7Pg52Ubi0zqJBNJnm"
+
+playlist:
+  # read live by composer.py
+  target_size: 40                       # doubled 2026-07-06 (was 20); ratio preserved
+  composition:
+    core: 24                            # was 12  (ratio 6:3:1 unchanged)
+    llm: 12                             # v2.19 (2026-10-06): DeepSeek picks — artists never heard (llm_discovery.py)
+    discovery: 0                        # artist-graph discovery; was 12. With llm_discovery.enabled: false
+                                        # the llm slots go back to discovery (exact v2.18 behaviour).
+    wildcard: 4                         # was 2; v2.19: new releases (≤30d) of DeepSeek-named similar artists
+  # v2.19: mix = positions 1–3 favourites, then the 16 new songs spread evenly
+  # through the rest (user choice 2026-10-06); block = favourites first, new songs after.
+  new_music_layout: mix
+  constraints:
+    max_tracks_per_artist: 3            # per-section cap (core / discovery / wildcard each)
+    max_tracks_per_artist_combined: 4   # cap across the merged pool (looser than per-section)
+    wildcard_release_window_days: 30
+
+exclude:
+  # Read at import by src/exclusions.py. Tracks matched here are dropped BEFORE
+  # scoring (so they never earn affinity or contaminate artist-graph discovery)
+  # AND filtered from every composition section. Complements the baby-sleep name
+  # filter in exclusions.py (a track is excluded if EITHER matches).
+  #
+  # Baby-sleep / white-noise artists — everything from these artists is excluded.
+  # Add more artist IDs as you find them (open.spotify.com/artist/<ID>).
+  artist_ids:
+    - "5PFhEtUuits5kch6cVL31o"   # artists on "Relaxing Baby Sleep Music"
+    - "3fPVH9rILsWGNptYYQUnh0"   #   (track 2xCoYKt0sKxUDnutaEJCFs — baby sleep)
+    - "2U8YfLNkdcmIyWPLU9Lzx8"   #
+
+  # Excluded albums — every track on these albums is dropped from playlist
+  # OUTPUT only (see exclusions.is_output_excluded_track). Unlike artist_ids,
+  # these are NOT dropped pre-scoring: the artist is genuinely liked, so their
+  # plays should still count toward affinity — we just don't want this album's
+  # versions surfacing in the playlist. Each album is pinned by its track IDs
+  # (track IDs are stable and exact). For a NAME-based rule that covers a whole
+  # category of albums, use album_name_contains below instead — prefer the
+  # name rule over per-album ID lists when the albums share a naming pattern.
+  #
+  # To add an album: look up its tracks and paste the IDs here —
+  #   GET /v1/albums/{album_id}/tracks?market={market}&limit=50
+  albums:
+    - name: "XDM Unidentified Waves"     # XG × JAKOPS, 2025-01-31 — XDM remix versions of XG tracks
+      album_id: "1z3VCBUJBHkpDHtzOZP205"
+      track_ids:
+        - "1zoaw0B1QheyRnA7pZEqCR"       # HESONOO + X-GENE x XDM
+        - "5W5yP5z0QkTsk06GSX2GNX"       # GRL GVNG x XDM
+        - "1a5Dhd82KaUqmz3sQEDNbs"       # WOKE UP x XDM
+        - "5yRRQlRb1b8J3DiDHMsB1P"       # SOMETHING AIN'T RIGHT x XDM
+        - "3JyviRYTc6zWPuQtZtgFw2"       # TGIF x XDM
+        - "0L7zZ3Wl9KVCaGpl2vzXnH"       # PUPPET SHOW x XDM
+        - "0ytRjAjsycFlu3ZA1bVpiJ"       # TIPPY TOES x XDM
+        - "28bgnX4IxlSiNgTyh3iAU9"       # NEW DANCE x XDM
+
+  # General album-name rule (OUTPUT-ONLY, same semantics as exclude.albums):
+  # any track whose ALBUM NAME contains one of these substrings is dropped from
+  # the playlist (case-insensitive substring match) but still earns affinity,
+  # so liked artists behind the album keep driving discovery.
+  #
+  # Subtitles: use this for a whole CATEGORY of albums (e.g. every Netflix
+  # series soundtrack) — no per-album ID lookup needed.
+  #
+  # MERGE: the per-ID "exclude.albums" entry for "Can This Love Be Translated?
+  # (Soundtrack from the Netflix Series)" (album 5Qg2iNuV6zTCGlIYunvvTd, Kim
+  # Min Seok (MeloMance), WENDY, 31 tracks) was removed 2026-08-28 — its name
+  # contains this substring, so this general rule subsumes it exactly.
+  album_name_contains:
+    - "(Soundtrack from the Netflix Series)"
+
+scoring:
+  # NOTE: this block is read live by scorer.py (see scorer.py header).
+  # Values below are the current production scoring (shortened from 30/14 for
+  # faster preference feedback — see references/artist-avoidance-decay.md).
+  window_days: 7
+  half_life_days: 7
+  like_threshold: 1.0
+  dislike_threshold: -1.0
+  weights:
+    full_listen: 1.0           # completion >= 0.90
+    mostly_listen: 0.5         # 0.50–0.90
+    partial_listen: 0.1        # 0.30–0.50
+    skip: -1.0                 # 0.10–0.30
+    hard_skip: -1.5            # < 0.10
+  snapshot:
+    retention_days: 90        # affinity_snapshot TTL (spec §7a)
+    vacuum_weekday: 6          # 0=Mon … 6=Sun; run incremental_vacuum on this day (Sunday)
+
+llm_discovery:
+  # v2.19 DeepSeek discovery (src/llm_discovery.py, job spotify_llm_discover_wrapper.py
+  # 01:20 SGT + 02:20 retry). Read live on every call. enabled: false = the composer
+  # goes back to artist-graph discovery + top-artist wildcards (exact v2.18) —
+  # the one-flag rollback. User decisions 2026-10-06: close to the 4th/5th-gen
+  # girl-group lane, lesser-known acts and b-sides, Korean adjacent scenes,
+  # NO J-pop (tuki. stays in core only), wildcards = similar artists' new releases.
+  enabled: true
+  model: deepseek-flash
+  thinking: true               # verified 2026-10-06: thinking ~24/25 exact matches vs ~21/25 without
+  # v2.22 (user 2026-10-12: "I don't want to perpetually keep raising the token limit"): max_tokens is a FIXED
+  # ceiling. The API has no reasoning cap, so the REQUEST is bounded instead (picks, prompt_chars_max) and the
+  # nightly report shows the reasoning share; if it creeps up, shrink picks_requested — never raise max_tokens.
+  max_tokens: 48000            # reasoning + reply; unused max_tokens is not billed
+  reasoning_effort: low        # 10-09 probe, real prompt: medium → cut off at 32k; low → 24.7k tokens, 110 s, 30 picks
+  fallback_max_tokens: 6000    # the one non-thinking retry
+  request_timeout_s: 250        # ~220 tokens/s → room for the 48k budget; job_budget_s still bounds it
+  fallback_timeout_s: 60
+  job_budget_s: 520            # < the gateway's 600s no_agent watchdog
+  min_interval_h: 6            # an ok batch this recent → the 02:20 retry is a no-op
+  picks_requested: 20          # v2.22: 30 → 20 (probe: reasoning ~31k → ~23k; ~13 usable/night vs ~9 placed/day, 7-day pool)
+  similar_artists_requested: 10  # v2.22: 15 → 10 (similar artists stay in the release scan for 60 days)
+  retry_picks: 12              # a cut-off / timed-out thinking reply → ONE smaller thinking retry …
+  retry_similar: 5
+  retry_max_tokens: 24000      # … with this budget, before the non-thinking fallback
+  retry_timeout_s: 150
+  prompt_chars_max: 14000      # hard prompt size (~11k today): oldest feedback, then oldest list names trimmed
+  feedback_items_max: 30       # WORKED / DIDNT_WORK entries each, newest first
+  reasoning_warn_share: 0.7    # reasoning above this share of max_tokens → ⚠️ in the summary and the report
+  budget_tokens_day: 120000    # v2.23 spend guard: ALL DeepSeek calls through llm_discovery (cron, manual, probes,
+                               # agents) per budget day (≤ ~$0.15/day). A night needs ~27k, its worst case ~89k
+  budget_day_start_hour: 1     # the budget day opens 01:00 SGT, just before the batch: each night gets it all
+  close_share: 0.7             # ~70% "close" (the listener's lane), ~30% "adjacent"
+  max_pick_age_days: 7         # unheard picks stay offerable this long
+  new_release_max_age_days: 2  # wildcards come from the latest scan only
+  new_release_artists_max: 60  # artists considered for releases per run (v2.20.3: back to 60 — the 72 h cache makes most free)
+  release_fetch_max: 30        # … of which at most this many are fetched fresh per run (the rest wait for later nights)
+  similar_artist_days: 60      # earlier batches' similar artists are scanned after today's (cap new_release_artists_max)
+  release_window_days: 30
+  min_duration_s: 90           # drops intros / interludes
+  name_backfill_per_run: 10    # GET artists/{id} lookups for unnamed library artists (v2.20.2: 30 → 10)
+  search_gap_s: 2.5            # spacing of every job call (2026-10-07: a 4.8 h catalogue ban after a 1.2 s-paced daytime run)
+  release_rescan_hours: 72     # an artist's album list is re-fetched at most this often (album track lists are cached)
+  # v2.21 (user 2026-10-12): every window of data sent to DeepSeek is capped at input_max_days —
+  # favourites, WORKED / DIDNT_WORK, MORE_FROM, FEEDBACK_SUMMARY, LIBRARY_ARTISTS, DO_NOT_SUGGEST
+  input_max_days: 14
+  profile_window_days: 14      # FAVOURITE_ARTISTS: decayed full listens over this window (was 60)
+  # v2.20 learning loop (references/llm-discovery.md → "Learning loop")
+  feedback_days: 14            # WORKED / DIDNT_WORK window (labelled with fit / tier / angle / left_at; was 21)
+  positive_artist_days: 90     # finished-DeepSeek-song artists may get more songs; their releases are scanned first
+                               # (composer / release scan; the prompt's MORE_FROM list is capped at input_max_days)
+  encore_days: 7               # encore: a finished, never-skipped DeepSeek song returns within this many days …
+  encore_max: 2                # … for at most this many heard encores (a 2nd full listen makes it a favourite) …
+  encore_slots: 3              # … in up to this many of the 12 llm slots (more if picks run short) …
+  encore_max_days: 4           # … placed as an encore on at most this many listening days
+  replay_skip_hours: 12        # a skip this soon after finishing the same song = playlist wrap-around, not a verdict
+  positive_release_max: 8      # newest positive artists scanned first for releases (v2.20.3: 15 → 8 — similar artists have the releases)
+  more_from_max_slots: 3       # v2.20.3 (user choice 2026-10-08): ≤ 3 of the 12 llm slots for more songs by finished artists
+  known_release_cooloff_days: 60   # a heard, non-positive artist's NEW releases may be tried again once unheard this long
+  library_list_max: 400        # LIBRARY_ARTISTS in the prompt: heard in the last input_max_days, most recent first
+  adaptive:                    # the close/adjacent mix and the daily angle follow the finish rates
+    enabled: true
+    min_judged: 8              # verdicts per fit (and across angles) before anything moves
+    min_per_angle: 5           # every angle needs this many before the angle bandit replaces the weekday rotation
+    close_share_min: 0.5
+    close_share_max: 0.85
+    feedback_days: 14          # FEEDBACK_SUMMARY window (was 30)
+  # v2.24 (user 2026-10-15): "slow songs + driving = sleepy" and "too many boy band / male artist songs" — over
+  # 14 days ~80% of slow / ballad DeepSeek songs and 60% of male acts were skipped (female acts 49%). The old
+  # adjacent scene (ballads, MeloMance, K-R&B, Korean bands) was steering into both.
+  vocal_filter: female_led     # girl groups / female soloists / female-fronted bands (finished artists excepted); any = off
+  min_bpm: 95                  # the model's tempo estimate below this → dropped before searching; 0 = off
+  core_scene: "lesser-known 4th/5th-generation K-pop girl groups and female soloists, upbeat tracks (the BABYMONSTER, izna, RESCENE, XG, fromis_9, NMIXX lane)"
+  adjacent_scenes: "upbeat female-led Korean pop beyond the girl-group core: female hip-hop / dance soloists, energetic female R&B, girl-group sub-units, female-fronted Korean pop-rock"
+  major_bsides_only: [NewJeans, aespa, LE SSERAFIM, TWICE, BLACKPINK, ITZY, "(G)I-DLE", Red Velvet, IVE, ILLIT, STAYC, NMIXX]
+  # compact-matched against credited artist names ("LiSA" left out: it would also block BLACKPINK's LISA)
+  blocked_artist_names: [tuki., YOASOBI, Ado, Vaundy, Kenshi Yonezu, King Gnu, Official HIGE DANdism,
+                         Mrs. GREEN APPLE, Aimer, Fujii Kaze, NiziU, "ME:I", HANA, "IS:SUE", "&TEAM",
+                         JO1, INI, "BE:FIRST", "ATARASHII GAKKO!", Nogizaka46, Sakurazaka46, Hinatazaka46]
+  angles:                      # Mon..Sun, applied to about half the picks
+    - "2022-2024 debuts from small and mid-size agencies"
+    - "fan-favourite b-sides of 4th-generation girl groups"
+    - "girl-group sub-units and female soloists' upbeat singles"   # v2.24: was the MeloMance / Whee In vocalist angle (1/4 finished)
+    - "underrated title tracks that charted low"
+    - "bright, high-tempo girl-group songs fans call underrated (Billlie / LIMELIGHT / HOT ISSUE lane)"   # v2.24: was K-R&B and Korean bands (1/8)
+    - "girl-crush, hip-hop-leaning acts (XG / BABYMONSTER / KISS OF LIFE lane)"
+    - "free choice: Korean acts casual fans don't know"
+
+api_guard:
+  # v2.20.2 Spotify catalogue guard (client.py; read at import by every process).
+  # 2026-10-07: ~230 catalogue calls one night + ~85 the next afternoon (both at
+  # ~50/min) → a 4.8 h Retry-After on search / artists / albums. Every catalogue
+  # GET from any process is now spaced, capped and blocked during a remembered ban.
+  # Player / playlist / me calls are not guarded.
+  enabled: true
+  min_gap_s: 2.5               # cross-process spacing (≤ 24/min; the ban came at ~50/min)
+  per_hour: 120                # rolling caps — a nightly batch needs ~80–110
+  per_day: 200                 # (the ban followed ~315 calls in 18 h)
+  ban_margin_s: 600            # a 429's Retry-After + this is remembered in the DB
+  max_wait_s: 30
+
+skip_signals:
+  # v2.18 skip detection (src/skipsig.py, skip_signals.py, sampler.py). Read live:
+  # by skip_signals.py on every call, by the resident sampler on file change.
+  # enabled: false = SHADOW MODE — the sampler observes, signals are rebuilt and
+  # the nightly digest posts, but scoring / composition / bans ignore them.
+  # Only the user flips this (after the digest accuracy gates pass).
+  # Enabled 2026-10-01: user verified the sampler output (first live morning).
+  enabled: true
+  sampler:
+    playing_s: 3               # GET /me/player cadence while a track plays
+    burst_s: 1                 # … for the first burst_window_s of each track / after an early exit
+    burst_window_s: 15
+    paused_s: 10
+    idle_recent_s: 5           # nothing playing, but something played < idle_recent_window_s ago
+    idle_recent_window_s: 2700 #   (car off / app backgrounded → a resume-then-skip is likely)
+    idle_s: 15                 # nothing playing, 06:00–24:00 SGT
+    night_idle_s: 60           # nothing playing, 00:00–06:00 SGT
+    max_req_per_30s: 20        # token bucket (the 03:00 refresh shares the app's rate budget)
+    quiet: ["02:55", "03:20"]  # ≥30s between polls around the refresh
+    continuity_max_pause_s: 7200   # same track resumed within 2h = the same exposure
+    session_gap_s: 3600        # ≥1h without playback starts a new session
+  judge:
+    t_pass_ms: 1500            # early exit below this listened = pass-through (no penalty)
+    t_judge_ms: 5000           # listened ≥ this (and < skip_completion_max) = skip; between = skim
+    # User rule (2026-10-01): leaving a song before 90% (next / tapping another
+    # song) IS a skip — even a first listen that turned out not to be liked.
+    # Stopping playback (end of a drive) and passes < t_pass are not skips.
+    skip_completion_max: 0.90  # an exit before this = skip / skim (was 0.30)
+    cooldown_completion_max: 0.90  # (early exits ≥ skip_completion_max never feed the cooldown)
+    completed_tol_ms: 15000    # within this of the end = completed (crossfade / automix)
+    session_grace_ms: 20000    # first track of a session left within this = neutral ("start fresh")
+    lost_gap_ms: 20000         # exit not bracketed by samples this close (or bridged by a 204) = unobserved
+  match_tolerance_ms: 10000    # recorded played_at vs observed exit
+  fallback:                    # positional inference for time the sampler did not see
+    per_track_unrecorded_max_ms: 45000   # ≤ this per passed-over position = T1, more = T2
+    min_per_track_ms: 1000     # less = a tap / queue jump (nothing inferred)
+    max_total_ms: 600000       # more = a pause (nothing inferred)
+    max_positions: 6           # more positions passed over = a tap, not a run of skips
+    min_ascending_frac: 0.8    # only sessions clearly played IN ORDER (shuffle is invisible here)
+    min_version_pairs: 3
+    unknown_slack_ms: 20000    # unexplained time before an uncovered play → its listen is unknown
+  cooldown:
+    first_days: 3              # any skip evidence → out of the next 3 refreshes
+    demote_skips: 2            # this many sampler skips …
+    demote_window_days: 14     # … within this window → out until a later completed play
+    demote_max_days: 30        # … but never longer than this
+    relax_on_underfill: true   # short of 40? let cooled-down tracks back (never demoted / <24h)
+  ban:
+    min_negative_days: 2       # a sampler-driven ban needs negative evidence on ≥2 listening days
+                               # (04:00→04:00 SGT); fallback inferences never count
+
+schedule:
+  # NOT read by any code. Source of truth is the cron config (hermes cron);
+  # listed here for reference. Polls at 04,07,10,13,16,17,19,22,23:00 SGT
+  # (roughly every 3h, plus 17:00 and 23:00 added May 2026) + a 02:00 overnight poll.
+  # Weekday and weekend lists are identical (the poll crons run every day).
+  poll_weekday_times: ["02:00", "04:00", "07:00", "10:00", "13:00", "16:00", "17:00", "19:00", "22:00", "23:00"]
+  poll_weekend_times: ["02:00", "04:00", "07:00", "10:00", "13:00", "16:00", "17:00", "19:00", "22:00", "23:00"]
+  refresh_time: "03:00"
+  timezone: "Asia/Singapore"
+
+paths:
+  # NOT read by any code: the DB path is db.DB_PATH (hardcoded default, set
+  # explicitly by the cron wrappers); logs/ is unused (cron run output lives in
+  # ~/.hermes/cron/output/<job_id>/).
+  db: "~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/spotify.db"
+  logs: "~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/logs"
