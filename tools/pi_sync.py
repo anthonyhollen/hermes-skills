@@ -195,13 +195,41 @@ def same(a, b):
         return False
 
 
-def copy_atomic(src, dst):
+def copy_atomic(src, dst, live=False):
+    """Copy src over dst atomically. Into the repo, keep src's mode (git only tracks
+    the exec bit). Into live, keep the existing file's mode (skill files are 600 by
+    convention, which a 644 git checkout would otherwise loosen), adding the exec
+    bit if git marks the file executable; new live files get 600 (700 if executable)."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
+    src_mode = os.stat(src).st_mode & 0o777
+    if live:
+        exec_bit = 0o100 if src_mode & 0o100 else 0
+        try:
+            mode = (os.stat(dst).st_mode & 0o777) | exec_bit
+        except FileNotFoundError:
+            mode = 0o600 | exec_bit
+    else:
+        mode = src_mode
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dst), prefix=".pisync-")
     os.close(fd)
     shutil.copyfile(src, tmp)
-    os.chmod(tmp, os.stat(src).st_mode & 0o777)
+    os.chmod(tmp, mode)
     os.replace(tmp, dst)
+
+
+def twin_mismatches(paths):
+    """scripts/<name> and skills/**/scripts/<name> are two copies of one file that
+    must stay byte-identical (cron runs the first). Report pairs touched by `paths`
+    whose repo copies differ."""
+    tracked = tracked_files()
+    top = {os.path.basename(p): p for p in tracked if p.count("/") == 1 and p.startswith("scripts/")}
+    pairs = [(top[os.path.basename(p)], p) for p in tracked
+             if p.startswith("skills/") and os.path.basename(os.path.dirname(p)) == "scripts"
+             and os.path.basename(p) in top]
+    touched = set(paths)
+    return [f"{a} != {b}" for a, b in pairs
+            if (a in touched or b in touched)
+            and not same(os.path.join(REPO, a), os.path.join(REPO, b))]
 
 
 def blob_bytes(rev, rel):
@@ -355,6 +383,12 @@ def run(args):
               + "\n".join(failures[:8]) + "\nPush a fix; the sync resumes automatically.", alerts_on)
         save_state(state)
         return 1
+    # Warn only: Hermes often edits just the cron copy, and blocking on the Pi's own
+    # commits would wedge the sync.
+    twins = twin_mismatches(incoming)
+    if twins:
+        alert(state, f"twins-{new}", f"commit {new[:8]} applied, but twin copies now differ "
+              "(make both byte-identical):\n" + "\n".join(twins[:8]), alerts_on)
 
     # 5. apply
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -370,7 +404,7 @@ def run(args):
                     shutil.copy2(lp, f"{lp}.bak-pisync-{stamp}")
                     backed_up.append(rel)
         if not same(lp, rp):
-            copy_atomic(rp, lp)
+            copy_atomic(rp, lp, live=True)
     for rel in deleted:
         lp = live_path(rel)
         if os.path.isfile(lp):
