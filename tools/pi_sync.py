@@ -481,16 +481,16 @@ def run(args):
         if changed:
             git("add", "-A", "--", *changed)
         if removed:
-            git("rm", "-q", "--cached", "--ignore-unmatch", "--", *removed)
+            git("rm", "-q", "--ignore-unmatch", "--", *removed)
         summary = ", ".join(os.path.basename(p) for p in (changed + removed)[:5])
         more = len(changed) + len(removed) - 5
         git("commit", "-q", "-m", f"pi: live edits - {summary}" + (f" (+{more} more)" if more > 0 else ""))
-        git("reset", "-q", "--hard", "HEAD")  # drop working-tree copies of removed files
     elif args.dry_run:
         log("dry-run: nothing to capture")
         return 0
 
-    # 2. rebase onto origin
+    # 2. rebase onto origin (an untracked file in the way would make the checkout fail)
+    git("clean", "-fdq", "--", *ROOTS)
     pre = git("rev-parse", "HEAD").stdout.strip()
     t_pre = tree(pre)
     git("fetch", "-q", "origin", BRANCH, timeout=180)
