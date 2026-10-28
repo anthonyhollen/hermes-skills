@@ -7,15 +7,15 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>/Users/anthonyhollen/hermes-skills/tools/mac_pull.sh</string>
+		<string>/Users/anthonyhollen/Library/Scripts/hermes-skills-pull.sh</string>
 	</array>
 	<key>StartInterval</key>
 	<integer>600</integer>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/Users/anthonyhollen/Library/Logs/hermes-skills-pull.log</string>
+	<string>/Users/anthonyhollen/Library/Logs/hermes-skills-pull.err.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/anthonyhollen/Library/Logs/hermes-skills-pull.log</string>
+	<string>/Users/anthonyhollen/Library/Logs/hermes-skills-pull.err.log</string>
 </dict>
 </plist>

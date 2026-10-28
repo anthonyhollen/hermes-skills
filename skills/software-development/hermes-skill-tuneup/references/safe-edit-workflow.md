@@ -3,28 +3,42 @@
 Follow this for **every** change.
 
 ## 0. Ham's skills are in git (since 2026-10-28)
-The "Built by Ham" skills (Obsidian *Skills MOC*), their cron wrappers in `~/.hermes/scripts/` and `~/.hermes/morning-brief/interests.json` are mirrored in the private repo **github.com/anthonyhollen/hermes-skills**. On the Pi, `~/hermes-skills-repo/tools/pi_sync.py` runs every 10 minutes from the system crontab. Each run:
-1. Commits live edits as `pi: live edits - ...`.
+The "Built by Ham" skills (Obsidian *Skills MOC*), their cron wrappers in `~/.hermes/scripts/` and `~/.hermes/morning-brief/interests.json` are mirrored in the private repo **github.com/anthonyhollen/hermes-skills**. On the Pi, cron runs the sync every 10 minutes from `~/hermes-skills-repo`; it runs a self-tested copy of `tools/pi_sync.py`. Each run:
+1. Commits live edits as `pi: live edits - ...`. It refuses (and alerts on) files over 1 MB, binary files, files containing secrets, and mass deletions.
 2. Rebases onto GitHub and pushes.
-3. Checks incoming files: `py_compile` (3.11), `bash -n`, SKILL.md frontmatter, JSON. A failure blocks the apply and alerts the playground channel.
+3. Checks the incoming files it will write: `py_compile` (3.11), `bash -n`, SKILL.md frontmatter, JSON. A failure blocks the apply and alerts the playground channel.
 4. Writes incoming changes into the live paths, keeping each file's existing mode (600 stays 600).
-5. Moves tag `pi-applied` to the commit it deployed.
+5. Moves tag `pi-applied` to the commit it deployed, and posts a 📦 commit notice.
 
 The repo's README.md and CLAUDE.md have the details. Other skills (bundled, archived) are still outside git: for those, everything below about backups applies unchanged.
 
-- **Hermes, on the Pi:** edit the live files as you always have. The next sync commits them. Never run git commands in `~/hermes-skills-repo`, and never edit `tools/pi_sync.py`. Changes pushed from the Mac can land at any 10-minute mark, so re-read a file right before you overwrite it.
-- **From the Mac (Claude Code), including away from home:** work in the clone (`~/hermes-skills`).
+- **Hermes, on the Pi:**
+  - Edit the live files as you always have; the next sync commits them.
+  - Never run git commands that change `~/hermes-skills-repo` (commit, checkout, reset, push…). Never edit anything under it, `tools/pi_sync.py` included. Read-only `git -C ~/hermes-skills-repo log -p -- <path>` / `show <sha>:<path>` is fine for looking at history.
+  - To undo an edit, write the old content back to the live file.
+  - Changes pushed from the Mac can land at any 10-minute mark, so re-read a file right before you overwrite it.
+  - A `<file>.bak-pisync-<ts>` next to a file means a GitHub change replaced a live edit of yours that hadn't synced yet. Re-apply it if it's still wanted. The weekly Backup Cleaner may delete these.
+- **From the Mac (Claude Code), including away from home:** follow the repo's CLAUDE.md. In short:
   1. `git pull --rebase`.
-  2. Edit, then `py_compile` / `bash -n`.
-  3. Commit and push.
-  4. Confirm the change is live once `git fetch --tags --force` shows `pi-applied` at your commit.
+  2. Edit.
+  3. Check with Apple's `/usr/bin/python3` (3.9, stricter than the Pi's 3.11) and `bash -n`.
+  4. Commit and push.
+  5. Confirm with `git fetch -q origin --tags --force && git merge-base --is-ancestor <sha> pi-applied`.
   
   §3's run-it-on-the-Pi checks need SSH. If a change needs a live dry-run, push only when you can do it, or ask Ham to trigger the skill.
-- **Over SSH:** you may still edit live, and the sync captures it. First run `python3 ~/hermes-skills-repo/tools/pi_sync.py -v` so a pending GitHub change lands before your edit, not on top of it.
-- **Twin copies** (`scripts/<x>.py` plus `skills/<cat>/<skill>/scripts/<x>.py`) are separate files in git. Change both. The sync warns when an applied commit leaves a pair different.
+- **Over SSH:** you may still edit live, and the sync captures it. First run `python3 ~/hermes-skills-repo/.sync/pi_sync_stable.py -v` so a pending GitHub change lands before your edit, not on top of it.
+- **Twin copies** (`scripts/<x>.py` plus `skills/<cat>/<skill>/scripts/<x>.py`) are separate files in git.
+  1. `cmp` them before editing. If they differ, reconcile first.
+  2. Change both.
+  
+  The sync warns when an applied commit leaves a pair different.
 
 ## 1. Rollback point (back up before overwriting)
-For a skill in the repo, git is the rollback: `git log -p -- <file>`, then `git checkout <sha> -- <file>` and push. A `.bak` copy is **optional**. It only helps undo a live edit within the ≤10 minutes before the sync commits it.
+For a skill in the repo, git is the rollback.
+- **On the Mac:** `git log -p -- <file>`, then `git checkout <sha> -- <file>`, commit and push.
+- **Hermes:** write the old content (from `git -C ~/hermes-skills-repo show <sha>:<path>`) back to the live file.
+
+A `.bak` copy is **optional**. It only helps undo a live edit within the ≤10 minutes before the sync commits it.
 
 For skills outside the repo, back up before every overwrite:
 ```bash

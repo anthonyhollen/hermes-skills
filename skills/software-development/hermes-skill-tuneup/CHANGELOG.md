@@ -8,6 +8,13 @@
   - §1: git is the rollback for repo skills, and `.bak` copies are optional for them. Backups are still required for skills outside the repo.
   - §2: how the drift check maps to `git pull` / `pi: live edits` commits.
 - **`SKILL.md`** *Editing Safely*: no longer says "skills live outside git". It now points to §0.
+- Review follow-up, same day:
+  - Hermes may only read the repo (log/show) and undoes an edit by rewriting the live file.
+  - Explains `.bak-pisync-*` files.
+  - The Mac checks Python with Apple's 3.9.
+  - The live check is `merge-base --is-ancestor <sha> pi-applied`.
+  - Covers capture refusals and the self-tested sync copy.
+  - Twin copies: `cmp` before editing.
 
 ## 1.9.36 — 2026-10-04 — cc-bill-review 3.5.1 follow-up (first live run, writeback)
 
