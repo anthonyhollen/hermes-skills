@@ -44,6 +44,7 @@ LOG_FILE = os.path.join(SYNC_DIR, "sync.log")
 BRANCH = "main"
 CONFLICT_BRANCH = "pi-conflict"
 APPLIED_TAG = "pi-applied"
+REPO_URL = "https://github.com/anthonyhollen/hermes-skills"
 ALERT_CHANNEL = "1501742338639401071"  # Discord playground
 ALERT_REPEAT_S = 6 * 3600
 QUIET_S = 60
@@ -114,6 +115,26 @@ def _discord_token():
     return None
 
 
+def post_discord(text):
+    """Post one message to the playground channel; True on success. Never raises."""
+    token = _discord_token()
+    if not token:
+        log("no Discord token; message not posted")
+        return False
+    body = json.dumps({"content": text[:1990], "allowed_mentions": {"parse": []},
+                       "flags": 4}).encode()  # 4 = SUPPRESS_EMBEDS: no link previews
+    req = urllib.request.Request(
+        f"https://discord.com/api/v10/channels/{ALERT_CHANNEL}/messages", data=body,
+        headers={"Authorization": f"Bot {token}", "Content-Type": "application/json",
+                 "User-Agent": "DiscordBot (hermes-skills-sync, 1.0)"})
+    try:
+        urllib.request.urlopen(req, timeout=20).read()
+        return True
+    except Exception as e:  # never let Discord break the sync
+        log(f"Discord post failed: {e}")
+        return False
+
+
 def alert(state, key, text, enabled=True):
     """Post to Discord once per key per ALERT_REPEAT_S."""
     log("ALERT " + text.replace("\n", " | "))
@@ -122,21 +143,37 @@ def alert(state, key, text, enabled=True):
     sent = state.setdefault("alerts", {})
     if time.time() - sent.get(key, 0) < ALERT_REPEAT_S:
         return
-    token = _discord_token()
-    if not token:
-        log("no Discord token; alert not posted")
-        return
-    body = json.dumps({"content": ("**hermes-skills sync** " + text)[:1990],
-                       "allowed_mentions": {"parse": []}}).encode()
-    req = urllib.request.Request(
-        f"https://discord.com/api/v10/channels/{ALERT_CHANNEL}/messages", data=body,
-        headers={"Authorization": f"Bot {token}", "Content-Type": "application/json",
-                 "User-Agent": "DiscordBot (hermes-skills-sync, 1.0)"})
-    try:
-        urllib.request.urlopen(req, timeout=20).read()
+    if post_discord("**hermes-skills sync** " + text):
         sent[key] = time.time()
-    except Exception as e:  # never let alerting break the sync
-        log(f"alert post failed: {e}")
+
+
+def commit_lines(shas):
+    lines = []
+    for sha in shas:
+        subject = git("log", "-1", "--format=%s", sha).stdout.strip()
+        files = [f for f in git("show", "--name-only", "--format=", sha).stdout.splitlines() if f]
+        where = sorted({"/".join(f.split("/")[:3]) if f.startswith("skills/") else f for f in files})
+        lines.append(f"- `{sha[:7]}` {subject} — {', '.join(where[:4])}"
+                     + (f" (+{len(where) - 4})" if len(where) > 4 else "")
+                     + f" <{REPO_URL}/commit/{sha}>")
+    return lines
+
+
+def notify_commits(pushed, applied, enabled=True):
+    """One Discord message per run that moved commits: the Pi's own pushes and the
+    GitHub commits now live on the Pi."""
+    parts = []
+    if pushed:
+        parts.append(f"**Pi → GitHub** ({len(pushed)}): live edits on the Pi")
+        parts += commit_lines(pushed[:10])
+    if applied:
+        parts.append(f"**GitHub → Pi** ({len(applied)}): now live")
+        parts += commit_lines(applied[:10])
+    if not parts:
+        return
+    log("NOTIFY " + " | ".join(parts))
+    if enabled:
+        post_discord("📦 **hermes-skills**\n" + "\n".join(parts))
 
 
 def live_path(rel):
@@ -355,18 +392,20 @@ def run(args):
     new = git("rev-parse", "HEAD").stdout.strip()
 
     # 3. push
-    ahead = git("rev-list", "--count", f"origin/{BRANCH}..HEAD").stdout.strip()
-    if ahead != "0":
+    pushed = git("rev-list", "--reverse", f"origin/{BRANCH}..HEAD").stdout.split()
+    if pushed:
         p = git("push", "-q", "origin", f"HEAD:{BRANCH}", check=False)
         if p.returncode:
             alert(state, "push", f"push failed (will retry): {p.stderr.strip()[:300]}", alerts_on)
+            pushed = []
         else:
-            log(f"pushed {ahead} commit(s)")
+            log(f"pushed {len(pushed)} commit(s)")
             state.get("alerts", {}).pop("push", None)
 
     if not last_applied:
         last_applied = head
     if new == last_applied:
+        notify_commits(pushed, [], alerts_on)
         mark_applied(state, new)
         return 0
 
@@ -381,6 +420,7 @@ def run(args):
         state["blocked"] = {"sha": new, "failures": failures}
         alert(state, f"blocked-{new}", f"commit {new[:8]} NOT applied - checks failed:\n"
               + "\n".join(failures[:8]) + "\nPush a fix; the sync resumes automatically.", alerts_on)
+        notify_commits(pushed, [], alerts_on)
         save_state(state)
         return 1
     # Warn only: Hermes often edits just the cron copy, and blocking on the Pi's own
@@ -413,6 +453,9 @@ def run(args):
     if backed_up:
         alert(state, f"overwrote-{new}", "applied GitHub changes over un-synced live edits; "
               "live copies kept as .bak-pisync-" + stamp + ": " + ", ".join(backed_up[:8]), alerts_on)
+    applied = [c for c in git("rev-list", "--reverse", f"{last_applied}..{new}").stdout.split()
+               if c not in pushed]
+    notify_commits(pushed, applied, alerts_on)
     mark_applied(state, new)
     return 0
 
@@ -421,7 +464,7 @@ def main():
     global VERBOSE
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="report live edits; change nothing")
-    ap.add_argument("--no-alert", action="store_true", help="log alerts instead of posting")
+    ap.add_argument("--no-alert", action="store_true", help="log alerts/notices instead of posting")
     ap.add_argument("-v", action="store_true", help="print the log to stdout")
     args = ap.parse_args()
     VERBOSE = args.v
