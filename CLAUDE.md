@@ -25,4 +25,4 @@ This repo is the editable mirror of Ham's Hermes skills, which run live on a Ras
 ## If the sync is blocked or conflicted
 
 - **Blocked** (a check failed): fix the file and push. The next run retries automatically.
-- **Conflict**: `git fetch origin pi-conflict && git merge origin/pi-conflict`, resolve, commit, push `main`.
+- **Conflict**: `git fetch origin pi-conflict && git merge origin/pi-conflict`, resolve, commit, push `main`. Once `pi-applied` reaches the merge, `git push origin --delete pi-conflict`.
