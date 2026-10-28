@@ -1,3 +1,14 @@
+## 1.10.0 — 2026-10-28 — skills in git (hermes-skills repo)
+
+- **`safe-edit-workflow.md`**:
+  - New §0. Ham's skills, their cron wrappers and interests.json are in github.com/anthonyhollen/hermes-skills.
+    - `pi_sync.py` syncs them with the Pi every 10 min: capture, rebase/push, check, apply, then move tag `pi-applied`.
+    - Who does what: Hermes edits live and never runs git in the working copy. The Mac works through the clone. An SSH edit runs the sync first.
+    - Twin copies must both be changed.
+  - §1: git is the rollback for repo skills, and `.bak` copies are optional for them. Backups are still required for skills outside the repo.
+  - §2: how the drift check maps to `git pull` / `pi: live edits` commits.
+- **`SKILL.md`** *Editing Safely*: no longer says "skills live outside git". It now points to §0.
+
 ## 1.9.36 — 2026-10-04 — cc-bill-review 3.5.1 follow-up (first live run, writeback)
 
 - **`delivery-reliability.md`**: corrected the 1.9.34 stdout bullet.

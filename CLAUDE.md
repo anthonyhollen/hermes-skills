@@ -20,6 +20,8 @@ This repo is the editable mirror of Ham's Hermes skills, which run live on a Ras
 - **Don't trigger paid LLM calls or post to real Discord channels** while testing locally. Live test messages go only to the playground channel.
 - Paths in code reference the Pi (`/home/amh/.hermes/...`, `~/.hermes/...`). Keep them; the code runs there, not on the Mac.
 - `scripts/` wrappers are cron entry points (`~/.hermes/cron/jobs.json` names the script). Renaming one breaks its cron job unless jobs.json changes too, and jobs.json is not in this repo.
+- **Twin copies must stay byte-identical.** Several scripts exist both as `scripts/<x>` (the copy cron runs) and as `skills/<cat>/<skill>/scripts/<x>` (the skill's canonical copy). Examples: food_recommender, foodpanda_*, sg_econ_*, token_report_no_agent, vault_audit*, backup_cleaner. Edit one, copy it over the other, and check with `cmp`. The Pi sync posts a warning when an applied commit leaves a pair different.
+- The live Hermes agent edits files on the Pi directly, and the sync commits those edits as `pi: live edits - ...`. Always pull before editing, and read those commits if they touch the same files.
 - Changing `tools/pi_sync.py` changes the deploy mechanism itself; a broken sync script can only be fixed over SSH. Change it with care, and `py_compile` it.
 
 ## If the sync is blocked or conflicted

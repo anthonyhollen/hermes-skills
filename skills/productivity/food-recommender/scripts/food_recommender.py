@@ -110,6 +110,10 @@ def get_sheets_service():
                 print(f"ERROR: Google token file not found: {token_path}", file=sys.stderr)
                 return None
             token_data = json.loads(open(token_path).read())
+            expiry = token_data.get("expiry")
+            if isinstance(expiry, (int, float)):
+                from datetime import datetime, timezone
+                token_data["expiry"] = datetime.fromtimestamp(expiry, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             creds = google.oauth2.credentials.Credentials.from_authorized_user_info(
                 token_data, scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )

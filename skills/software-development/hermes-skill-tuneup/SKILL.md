@@ -1,7 +1,7 @@
 ---
 name: hermes-skill-tuneup
 description: "Use to audit, debug, optimize, slim down, or harden an existing Hermes skill on the Pi — a four-pass tune-up: bug hunt, performance, token efficiency, delivery reliability. Not for authoring new skills."
-version: 1.9.36
+version: 1.10.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -69,7 +69,7 @@ Run the token-efficiency relocation/slimming + the final doc-sync **only once th
 - **Token efficiency** → `references/token-efficiency.md`. `SKILL.md` loads on every trigger; the `description` is always-on. **Relocate** reference-only content (changelog, recovery data, verbose mechanics, big examples) into `references/` + `CHANGELOG.md` — append unique blocks (don't delete), pointer-replace duplicated ones, then verify nothing was lost. Keep SKILL.md = triggers + operations + a References table. If the skill **calls an LLM per item** at runtime, the reference also covers trimming that prompt (drop unused fields, cap input per task type, `max_tokens` doesn't bill).
 
 ## Editing Safely
-Skills live outside git, so follow `references/safe-edit-workflow.md` for **every** change: back up before overwrite → edit locally & push over SSH → restore mode 600 → `py_compile` + dry-run **with the gateway venv interpreter** (`~/.hermes/hermes-agent/venv/bin/python` — not system `python3`; imports differ) → validate outward actions **without spamming** (e.g. `GET /channels/{id}`, ask before a live send) → change cron config with `hermes cron edit`, never hand-edit `jobs.json` → bump `version` + add a `CHANGELOG.md` entry → delete backups only after the user confirms a live run.
+Ham's own skills are in git (github.com/anthonyhollen/hermes-skills, two-way synced with the Pi every 10 min). Other skills are not. Follow `references/safe-edit-workflow.md` for **every** change: read §0 first (repo workflow; Hermes edits live and never runs git in `~/hermes-skills-repo`) → rollback point (git for repo skills, a `.bak-<tag>-<date>` for the rest) → edit (repo: pull, edit, push, confirm tag `pi-applied`; SSH: push the file, restore mode 600) → `py_compile` + dry-run **with the gateway venv interpreter** (`~/.hermes/hermes-agent/venv/bin/python` — not system `python3`; imports differ) → validate outward actions **without spamming** (e.g. `GET /channels/{id}`, ask before a live send) → change cron config with `hermes cron edit`, never hand-edit `jobs.json` → bump `version` + add a `CHANGELOG.md` entry → delete any backups only after the user confirms a live run.
 
 ## Always finish a tune-up with (required)
 A tune-up is not done until **both** of these are met:

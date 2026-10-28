@@ -36,8 +36,8 @@ morning-brief/                         ← this skill dir (code + docs)
     ├── feed_doctor.py  — on-demand tool: find LLM-suggested + live-probed replacements for dead/zero-yield feeds
     └── test_morning_brief.py — offline regression suite (temp HOME; run with /usr/bin/python3)
 
-~/.hermes/morning-brief/               ← RUNTIME DATA dir (separate from code; not in git)
-├── interests.json                     ← topics[] + block_keywords[]  (hand-edited config)
+~/.hermes/morning-brief/               ← RUNTIME DATA dir (separate from code; only interests.json is in git)
+├── interests.json                     ← topics[] + block_keywords[]  (hand-edited config; repo: data/morning-brief/interests.json)
 ├── articles.json                      ← Stage 1 output
 ├── articles_summarized.json           ← Stage 2 output
 ├── feed_health.json                   ← per-feed {consecutive_failures, last_ok, …} (auto-managed)

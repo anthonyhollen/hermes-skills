@@ -1,15 +1,39 @@
 # Safe Edit Workflow (editing skills on the Pi)
 
-Skills live under `~/.hermes/skills/` outside any git repo, so there's no `git checkout` to undo a bad edit. Follow this for **every** change.
+Follow this for **every** change.
 
-## 1. Back up before overwriting
+## 0. Ham's skills are in git (since 2026-10-28)
+The "Built by Ham" skills (Obsidian *Skills MOC*), their cron wrappers in `~/.hermes/scripts/` and `~/.hermes/morning-brief/interests.json` are mirrored in the private repo **github.com/anthonyhollen/hermes-skills**. On the Pi, `~/hermes-skills-repo/tools/pi_sync.py` runs every 10 minutes from the system crontab. Each run:
+1. Commits live edits as `pi: live edits - ...`.
+2. Rebases onto GitHub and pushes.
+3. Checks incoming files: `py_compile` (3.11), `bash -n`, SKILL.md frontmatter, JSON. A failure blocks the apply and alerts the playground channel.
+4. Writes incoming changes into the live paths, keeping each file's existing mode (600 stays 600).
+5. Moves tag `pi-applied` to the commit it deployed.
+
+The repo's README.md and CLAUDE.md have the details. Other skills (bundled, archived) are still outside git: for those, everything below about backups applies unchanged.
+
+- **Hermes, on the Pi:** edit the live files as you always have. The next sync commits them. Never run git commands in `~/hermes-skills-repo`, and never edit `tools/pi_sync.py`. Changes pushed from the Mac can land at any 10-minute mark, so re-read a file right before you overwrite it.
+- **From the Mac (Claude Code), including away from home:** work in the clone (`~/hermes-skills`).
+  1. `git pull --rebase`.
+  2. Edit, then `py_compile` / `bash -n`.
+  3. Commit and push.
+  4. Confirm the change is live once `git fetch --tags --force` shows `pi-applied` at your commit.
+  
+  §3's run-it-on-the-Pi checks need SSH. If a change needs a live dry-run, push only when you can do it, or ask Ham to trigger the skill.
+- **Over SSH:** you may still edit live, and the sync captures it. First run `python3 ~/hermes-skills-repo/tools/pi_sync.py -v` so a pending GitHub change lands before your edit, not on top of it.
+- **Twin copies** (`scripts/<x>.py` plus `skills/<cat>/<skill>/scripts/<x>.py`) are separate files in git. Change both. The sync warns when an applied commit leaves a pair different.
+
+## 1. Rollback point (back up before overwriting)
+For a skill in the repo, git is the rollback: `git log -p -- <file>`, then `git checkout <sha> -- <file>` and push. A `.bak` copy is **optional**. It only helps undo a live edit within the ≤10 minutes before the sync commits it.
+
+For skills outside the repo, back up before every overwrite:
 ```bash
 ssh amh@amhpi5.local "cp '<file>' '<file>.bak-<tag>-<date>'"   # e.g. .bak-precurl-20260712 — descriptive tag + date
 ```
-Use the **`<file>.bak-<tag>-<date>`** form (the convention actually in use — a descriptive tag plus a date, so multiple backups of one file sort chronologically and don't collide). Note it does **not** end in `.bak`; the auditor's stray-file check matches both `*.bak` and `*.bak-*` for exactly this reason (§6). Keep backups only until the user confirms a live run; then delete them (clutter otherwise) — the auditor will keep listing them under `[STRAY FILES]` until you do.
+Whenever you make a backup, use the **`<file>.bak-<tag>-<date>`** form (the convention actually in use — a descriptive tag plus a date, so multiple backups of one file sort chronologically and don't collide). It is gitignored. Note it does **not** end in `.bak`; the auditor's stray-file check matches both `*.bak` and `*.bak-*` for exactly this reason (§6). Keep backups only until the user confirms a live run; then delete them (clutter otherwise) — the auditor will keep listing them under `[STRAY FILES]` until you do.
 
 ## 2. Edit locally, push over SSH
-**First confirm your local copy matches the live file** (`shasum -a 256` both ends) — otherwise you may clobber drift you never saw (a sibling cron-deployed copy edited since you pulled, or a change from another session). **A background skill-curator edits skills *between your passes*:** Hermes runs an "update the skill library" agent after Discord sessions (visible in `agent.log` as a `bg-review` "Be ACTIVE" turn) that rewrites `SKILL.md`/scripts with **no version bump or changelog**, and can **misdiagnose** — in one session it "fixed" a red-herring (a carpark-code note) and renamed map markers while the real delivery bug went untouched. So re-pull + `diff` the live file **before every push**, not just once at tune-up start; reconcile its undocumented edits *into* yours instead of clobbering them; and verify its changes like any other diff (don't trust them as correct). Then edit the local copy (clean diffs), push, and restore permissions to match siblings (mode `600`):
+(For repo skills from the Mac, "push" means `git push`; see §0. The drift check below becomes `git pull --rebase`, plus `git log` to spot `pi: live edits` commits, which are where the curator's edits show up now.) **First confirm your local copy matches the live file** (`shasum -a 256` both ends) — otherwise you may clobber drift you never saw (a sibling cron-deployed copy edited since you pulled, or a change from another session). **A background skill-curator edits skills *between your passes*:** Hermes runs an "update the skill library" agent after Discord sessions (visible in `agent.log` as a `bg-review` "Be ACTIVE" turn) that rewrites `SKILL.md`/scripts with **no version bump or changelog**, and can **misdiagnose** — in one session it "fixed" a red-herring (a carpark-code note) and renamed map markers while the real delivery bug went untouched. So re-pull + `diff` the live file **before every push**, not just once at tune-up start; reconcile its undocumented edits *into* yours instead of clobbering them; and verify its changes like any other diff (don't trust them as correct). Then edit the local copy (clean diffs), push, and restore permissions to match siblings (mode `600`):
 ```bash
 ssh amh@amhpi5.local "cat > '<remote path>'" < /tmp/<localfile>
 ssh amh@amhpi5.local "chmod 600 '<remote path>'"
