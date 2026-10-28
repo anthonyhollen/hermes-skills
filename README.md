@@ -18,7 +18,7 @@ The live copy runs on the Raspberry Pi (`amh@amhpi5.local`). This repo mirrors i
 1. **Capture**: edits made on the Pi (by Hermes or over SSH) are committed as `pi: live edits - ...`.
 2. **Rebase** onto `origin/main` to pick up edits pushed from elsewhere, then **push**.
 3. **Check** each incoming file: `py_compile` on `.py`, `bash -n` on `.sh`, frontmatter on `SKILL.md`, parse on `.json`.
-4. **Apply** only the files that changed in git since the last apply. Runtime state (DBs, caches, logs, `.bak-*`) is gitignored and never touched.
+4. **Apply** only the files that changed in git since the last apply. Runtime state (DBs, caches, logs, `.bak-*`) is gitignored and never touched. Afterwards, tag `pi-applied` is moved to the commit now live.
 
 When something goes wrong, the job alerts the Discord playground channel:
 

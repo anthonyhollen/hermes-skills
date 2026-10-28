@@ -12,7 +12,7 @@ This repo is the editable mirror of Ham's Hermes skills, which run live on a Ras
    - `bash -n <changed .sh files>`
    - Run the skill's tests if it has any (e.g. `scripts/test_*.py`) and they don't need Pi-only resources (Hermes home, `.env`, Discord, live APIs).
 5. Commit with a clear message and push to `main`.
-6. Confirm the sync applied it. The Pi has no SSH access from outside, so check GitHub instead: the Pi's next push, or no alert in the Discord playground channel.
+6. Confirm it went live. The Pi isn't reachable from outside, but after each successful apply it moves tag `pi-applied` on GitHub to the commit it deployed. `git fetch -q origin --tags --force && git log -1 --oneline pi-applied` should reach your commit within ~10 minutes. If it doesn't, the sync is blocked or conflicted: the Discord playground channel has the alert, and a `pi-conflict` branch exists if it's a conflict.
 
 ## Constraints
 

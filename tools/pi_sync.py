@@ -43,6 +43,7 @@ STATE_FILE = os.path.join(SYNC_DIR, "state.json")
 LOG_FILE = os.path.join(SYNC_DIR, "sync.log")
 BRANCH = "main"
 CONFLICT_BRANCH = "pi-conflict"
+APPLIED_TAG = "pi-applied"
 ALERT_CHANNEL = "1501742338639401071"  # Discord playground
 ALERT_REPEAT_S = 6 * 3600
 QUIET_S = 60
@@ -236,15 +237,26 @@ def check_file(rel):
 
 
 def recently_modified(paths):
+    """First live file that differs from the repo and changed in the last QUIET_S
+    (likely mid-edit). Files the sync itself just wrote match the repo, so don't count."""
     now = time.time()
     for rel in paths:
         lp = live_path(rel)
         try:
-            if now - os.path.getmtime(lp) < QUIET_S:
+            if now - os.path.getmtime(lp) < QUIET_S and not same(lp, os.path.join(REPO, rel)):
                 return rel
         except OSError:
             pass
     return None
+
+
+def mark_applied(state, sha):
+    """Record sha as live and publish it as tag pi-applied, so the Mac can see what's deployed."""
+    state.update(last_applied=sha, blocked=None, last_ok=time.time())
+    if state.get("tag") != sha:
+        if git("push", "-q", "-f", "origin", f"{sha}:refs/tags/{APPLIED_TAG}", check=False).returncode == 0:
+            state["tag"] = sha
+    save_state(state)
 
 
 def run(args):
@@ -327,8 +339,7 @@ def run(args):
     if not last_applied:
         last_applied = head
     if new == last_applied:
-        state.update(last_applied=new, blocked=None, last_ok=time.time())
-        save_state(state)
+        mark_applied(state, new)
         return 0
 
     # 4. check incoming
@@ -368,8 +379,7 @@ def run(args):
     if backed_up:
         alert(state, f"overwrote-{new}", "applied GitHub changes over un-synced live edits; "
               "live copies kept as .bak-pisync-" + stamp + ": " + ", ".join(backed_up[:8]), alerts_on)
-    state.update(last_applied=new, blocked=None, last_ok=time.time())
-    save_state(state)
+    mark_applied(state, new)
     return 0
 
 
