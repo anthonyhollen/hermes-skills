@@ -4,6 +4,12 @@ Full dated history of bugs, fixes, and design changes for the sg-commute skill. 
 
 ---
 
+#### 2026-10-29 — PM2.5 legend: an emoji for every band (v1.12.0 → v1.12.1)
+
+**User request:** the 50–99 and 100+ bands had no emoji in the morning report's air-quality legend. `morning_commute.py` `pm_level` + the `section4` legend now tag 🟠 20–49 Unhealthy (Sensitive) (was 🔴), 🔴 50–99 Unhealthy (was 🔴, unlabelled in the legend), 🟣 100+ Very Unhealthy (was 🔴, unlabelled). 0–9 🟢 and 10–19 🟡 unchanged. The same emoji is used for the East / regional-average readings, so a reading and its legend band always match. First change shipped through the hermes-skills repo (Mac → GitHub → Pi sync); test report posted to the playground channel.
+
+---
+
 #### 2026-10-14 — Wednesday commute → Innovis; AMK kept on file (v1.11.0 → v1.12.0)
 
 **User request:** plan the Wednesday morning commute for Innovis instead of AMK, but keep the AMK format so it can be restored to any day later. `morning_commute.py`: the weekday-keyed `DESTS` tuple map is split into `DEST_PROFILES` (slug → label, address, slug, rain station, station name, distance; `innovis` + `amk`) and `SCHEDULE` (weekday → slug; Tue/Wed/Thu all `"innovis"`). The AMK profile is unchanged (S109 Ang Mo Kio Ave 5, direct route, ≥8 km floor), and the `amk` argv/`DEST` override still renders it. **To restore AMK to a day:** set that weekday to `"amk"` in `SCHEDULE`; a day outside Tue–Thu also needs `hermes cron edit b617d89da15b --schedule …` (cron is `25 7 * * 2,3,4`). The cron job and the evening report are unchanged (the evening report doesn't depend on the destination).

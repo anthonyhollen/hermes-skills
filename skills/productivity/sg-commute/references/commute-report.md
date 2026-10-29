@@ -35,7 +35,7 @@ The exact current output (all variants of each line) is in `developer-guide.md` 
 • No flood alerts currently in effect
 
 **4. Air Quality** - East region: *<value> µg/m³ (<level> <emoji>)*, Regional avg: *<avg> µg/m³ (<level> <emoji>)*
-• WHO PM2.5 scale: 🟢 0–9 Good / 🟡 10–19 Moderate / 🔴 20–49 Unhealthy (Sensitive) / 50–99 Unhealthy / 100+ Very Unhealthy
+• WHO PM2.5 scale: 🟢 0–9 Good / 🟡 10–19 Moderate / 🟠 20–49 Unhealthy (Sensitive) / 🔴 50–99 Unhealthy / 🟣 100+ Very Unhealthy
 
 **5. Commute to <DEST>** *(<address>)*
 • Distance: <X.X> km
@@ -112,7 +112,7 @@ East reading: `pm["data"]["items"][0]["readings"]["pm25_one_hourly"]["east"]` (s
 Regional average: average of N/S/E/W/Central values
 Timestamps: already SGT (+08:00) — no conversion needed
 
-Scale (the user's chosen bands, printed in full in the legend since v1.11.0): 0–9 Good, 10–19 Moderate, 20–49 Unhealthy (Sensitive), 50–99 Unhealthy, 100+ Very Unhealthy. Only numeric regions are averaged (a null region used to blank the section).
+Scale (the user's chosen bands, printed in full in the legend since v1.11.0; every band has its own emoji since v1.12.1): 🟢 0–9 Good, 🟡 10–19 Moderate, 🟠 20–49 Unhealthy (Sensitive), 🔴 50–99 Unhealthy, 🟣 100+ Very Unhealthy. Only numeric regions are averaged (a null region used to blank the section).
 
 ### Section 5 — Commute
 

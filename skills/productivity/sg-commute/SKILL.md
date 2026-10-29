@@ -1,7 +1,7 @@
 ---
 name: sg-commute
 description: Singapore parking / car park finder (live HDB, LTA and URA lots + EV chargers near a postal code or address, posted to Discord) plus commute routes, weather/rain/PM2.5 and the morning/evening commute reports.
-version: 1.12.0
+version: 1.12.1
 author: Nous Research
 license: MIT
 metadata:

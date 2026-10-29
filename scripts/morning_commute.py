@@ -167,10 +167,10 @@ def pm_level(v):
     if v <= 19:
         return "Moderate", "\U0001F7E1"  # 🟡
     if v <= 49:
-        return "Unhealthy (Sensitive)", "\U0001F534"  # 🔴
+        return "Unhealthy (Sensitive)", "\U0001F7E0"  # 🟠
     if v <= 99:
-        return "Unhealthy", "\U0001F534"
-    return "Very Unhealthy", "\U0001F534"
+        return "Unhealthy", "\U0001F534"              # 🔴
+    return "Very Unhealthy", "\U0001F7E3"             # 🟣
 
 
 def _parse_ts(iso):
@@ -389,7 +389,8 @@ def section4():
         return ("**4. Air Quality** - East region: %s, "
                 "Regional avg: *%d µg/m³ (%s %s)*\n"
                 "• WHO PM2.5 scale: \U0001F7E2 0–9 Good / \U0001F7E1 10–19 Moderate / "
-                "\U0001F534 20–49 Unhealthy (Sensitive) / 50–99 Unhealthy / 100+ Very Unhealthy"
+                "\U0001F7E0 20–49 Unhealthy (Sensitive) / \U0001F534 50–99 Unhealthy / "
+                "\U0001F7E3 100+ Very Unhealthy"
                 % (east_s, avg_r, al, ae))
     except Exception as e:
         return "**4. Air Quality** - *unavailable (%s)*" % _safe_err(e)

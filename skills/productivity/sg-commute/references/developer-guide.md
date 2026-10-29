@@ -197,13 +197,13 @@ east_pm25 = readings["east"]
 avg_pm25  = round(sum(readings.values()) / len(readings))
 ```
 
-**PM2.5 scale** (the user's chosen bands, implemented in `morning_commute.py` `pm_level`; the report's legend lists all five since v1.11.0 — the cron prompt is not read):
+**PM2.5 scale** (the user's chosen bands, implemented in `morning_commute.py` `pm_level`; the report's legend lists all five since v1.11.0, each with its own emoji since v1.12.1 — the cron prompt is not read):
 ```
 0–9 µg/m³:   Good 🟢
 10–19 µg/m³: Moderate 🟡
-20–49 µg/m³: Unhealthy (Sensitive) 🔴
-50–99:        Unhealthy
-100+:         Very Unhealthy
+20–49 µg/m³: Unhealthy (Sensitive) 🟠
+50–99 µg/m³: Unhealthy 🔴
+100+ µg/m³:  Very Unhealthy 🟣
 ```
 
 ## Geocoding
@@ -339,7 +339,7 @@ The old single-digit split (`pi // 100000`) probed scattered sectors (03/13/23 f
 • No flood alerts currently in effect      | ⚠️ Flood alert in effect (N active readings) | ⚠️ Flood alert reported in the last ~45 min (…may have cleared) | Flood alert status unavailable
 
 **4. Air Quality** - East region: *<v> µg/m³ (<level> <emoji>)*, Regional avg: *<avg> µg/m³ (<level> <emoji>)*
-• WHO PM2.5 scale: 🟢 0–9 Good / 🟡 10–19 Moderate / 🔴 20–49 Unhealthy (Sensitive) / 50–99 Unhealthy / 100+ Very Unhealthy
+• WHO PM2.5 scale: 🟢 0–9 Good / 🟡 10–19 Moderate / 🟠 20–49 Unhealthy (Sensitive) / 🔴 50–99 Unhealthy / 🟣 100+ Very Unhealthy
 
 **5. Commute to <DEST>** *(<address>)*
 • Distance: <X.X> km[ *(ECP route unavailable — showing fastest route)*][ *(route may be inaccurate — verify manually)*]
