@@ -1051,7 +1051,7 @@ def _load_token():
     return None
 
 def _discord_send_pair(token, channel_id, content, img_path=None, max_retries=3, nonce=None,
-                       deadline=None):
+                       deadline=None, embeds=None, files=None):
     """Send ONE Discord message via curl multipart. If img_path is given, the file is
     attached to the SAME message (atomic header+image pair) — the only reliable way to
     pair text+image (the gateway's `extract_media()` reorders MEDIA: tags).
@@ -1061,9 +1061,14 @@ def _discord_send_pair(token, channel_id, content, img_path=None, max_retries=3,
     server-side; @/</; stay literal). A per-message `nonce` + enforce_nonce makes a
     retry after a timeout/5xx safe: if the first POST actually landed, Discord returns
     that message instead of creating a duplicate. 429 honours retry_after.
+    `embeds` + `files` send the whole report as ONE message: files[i] is uploaded as
+    imgN.png and shown by the embed whose image.url is attachment://imgN.png.
     """
     last_err, status = "", ""
     body_json = {"content": content, "allowed_mentions": {"parse": []}}
+    if embeds:
+        body_json["embeds"] = embeds
+        body_json["attachments"] = [{"id": i, "filename": f"img{i}.png"} for i in range(len(files or []))]
     if nonce:
         body_json.update({"nonce": nonce, "enforce_nonce": True})
     payload = json.dumps(body_json)
@@ -1076,7 +1081,10 @@ def _discord_send_pair(token, channel_id, content, img_path=None, max_retries=3,
             "-H", f"Authorization: Bot {token}",
             "--form-string", f"payload_json={payload}",
         ]
-        if img_path and os.path.exists(img_path):
+        if files:
+            for i, f in enumerate(files):
+                cmd += ["-F", f"files[{i}]=@{f};filename=img{i}.png;type=image/png"]
+        elif img_path and os.path.exists(img_path):
             cmd += ["-F", f"file=@{img_path}"]
         wait = 1.5 * (attempt + 1)
         try:
@@ -1344,6 +1352,17 @@ def _sanitize_discord(s):
     return s
 
 
+EMBED_COLORS = [0x5865F2, 0x57F287, 0xFEE75C]
+
+
+def section_body_text(body):
+    """A section's body as sanitized text (the part of format_section_content after the
+    header); used as an embed description. `body` is untrusted (geocoded address)."""
+    if isinstance(body, list):
+        return "\n".join(_sanitize_discord(b) for b in body if b)
+    return _sanitize_discord(body) if body else ""
+
+
 def format_section_content(header, body):
     """Return the canonical Discord content string for one section. `header` is a
     fixed trusted literal; `body` is untrusted (geocoded address) → sanitized."""
@@ -1389,9 +1408,22 @@ if SEND:
     # This run's PNGs (tables + map) — reclaimed only after a FULL delivery, so a
     # failed/partial send leaves them for a retry (the age sweep clears them later).
     generated_pngs = [img for (_, _, img) in sections if img]
-    messages = [("## :red_car: Parking Lot Report", None)] + [
-        (format_section_content(h, b), i) for (h, b, i) in sections]
-    total = len(messages)
+    title = "## :red_car: Parking Lot Report"
+    # Primary layout (user decision 2026-10-29): ONE message, the title as text plus one
+    # embed card per section (header = card title, body = description, table/map = image).
+    embeds, files = [], []
+    for n, (h, b, i) in enumerate(sections):
+        card = {"title": h, "color": EMBED_COLORS[n % len(EMBED_COLORS)]}
+        desc = section_body_text(b)
+        if desc:
+            card["description"] = desc[:4096]
+        if i and os.path.exists(i):
+            card["image"] = {"url": f"attachment://img{len(files)}.png"}
+            files.append(i)
+        embeds.append(card)
+    # Fallback layout: the title, then one header+image message per section.
+    messages = [(title, None)] + [(format_section_content(h, b), i) for (h, b, i) in sections]
+    total = 1
     run_id = f"{int(time.time() * 1000) % 10**11:011d}"   # nonce: "sgc" + 11 + 2 ≤ 25 chars
     sent, fatal = 0, None
     # The agent's terminal call times out at ~60–120 s; a sustained 429/5xx must end the
@@ -1399,7 +1431,21 @@ if SEND:
     send_deadline = _T0 + SEND_DEADLINE_S
     ambiguous = False     # a POST that timed out / 5xx'd may have landed anyway
     try:
-        for idx, (content, img) in enumerate(messages):
+        ok, status = _discord_send_pair(token, TARGET_CHANNEL, title, nonce=f"sgc{run_id}99",
+                                        deadline=send_deadline, embeds=embeds, files=files)
+        if ok:
+            sent = 1
+        elif status == "400":
+            # Discord rejected the carded post outright (nothing landed): send the
+            # previous layout instead, one message per section.
+            print("WARNING: single post rejected (HTTP 400); sending one message per section",
+                  file=sys.stderr)
+            total = len(messages)
+        else:
+            if status not in ("401", "403", "404", "429"):
+                ambiguous = True   # 5xx / network / deadline: the POST may have landed
+            fatal = status if status in ("401", "403", "404", "429", "deadline") else None
+        for idx, (content, img) in enumerate(messages if total > 1 else []):
             if send_deadline - time.monotonic() < MIN_START_S:
                 fatal = fatal or "deadline"
                 break

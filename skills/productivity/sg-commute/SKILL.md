@@ -1,7 +1,7 @@
 ---
 name: sg-commute
 description: Singapore parking / car park finder (live HDB, LTA and URA lots + EV chargers near a postal code or address, posted to Discord) plus commute routes, weather/rain/PM2.5 and the morning/evening commute reports.
-version: 1.13.0
+version: 1.14.0
 author: Nous Research
 license: MIT
 metadata:
@@ -59,5 +59,5 @@ Both deliver to #alerts (`deliver: discord:1499972245437550602`). The evening sc
 | `references/developer-guide.md` | Maintenance internals (APIs, field paths, algorithms, pitfalls) — the long form of `CLAUDE.md` |
 | `references/changelog.md` | Full dated history (why things are the way they are) — read before changing route/waypoint/delivery/EV-scan logic |
 | `references/geocoding-troubleshooting.md`, `lta-carpark-availability.md`, `jtc-carpark-info.md`, `ura-carpark-geojson.md`, `api-response-corrections.md` | Source-specific notes |
-| `references/traffic-images-api.md`, `commute-camera-filtering.md` | Traffic cameras along a route (shared with the traffic-camera skill) |
+| `references/traffic-images-api.md`, `commute-camera-filtering.md` | Traffic cameras along a route. Historical only: the traffic-camera skill was **retired 2026-10-29** (the provider shut down most cameras); don't build on these |
 | `references/static-map-discord-rendering.md`, `traffic-colour-update-2026-05-28.md`, `cron-prompt-delivery-patterns.md`, `silent-delivery-failure.md`, `run-deviation-diagnosis.md` | Historical diagnoses (mostly from the agent-mode era before 2026-05-31) |
