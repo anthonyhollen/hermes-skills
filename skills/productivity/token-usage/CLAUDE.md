@@ -108,7 +108,7 @@ r = subprocess.run([...], capture_output=True, text=True, timeout=10)  # capture
 
 ## Discord Delivery Rules
 
-**Atomic header+image pairing via `discord_post()`** — content and file in ONE multipart request per section, HTTP-status-checked, bounded, with one 429 retry. Full rationale in `references/2026-07-delivery-hardening.md`:
+**ONE message, header+image pairing via embeds (since 1.2.0, 2026-10-29)** — `discord_post(title, embeds=…, imgs=…)` sends the title plus one embed per section (embed title = section header, `image.url = attachment://sectionN.png`, PNGs as `files[N]`) in a single request. A definite HTTP rejection falls back to the old layout. Each fallback message is still content + file in ONE multipart request per section, HTTP-status-checked, bounded, with one 429 retry. Full rationale in `references/2026-07-delivery-hardening.md`. The snippet below is the pre-1.2.0 per-section form, kept for the rationale; the script is the source of truth (it now returns the HTTP status string, and takes `embeds`/`imgs` for the single post):
 
 ```python
 def discord_post(content, img=None, _retried=False):

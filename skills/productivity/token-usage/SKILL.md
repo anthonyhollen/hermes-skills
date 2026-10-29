@@ -1,7 +1,7 @@
 ---
 name: token-usage
 description: "Use when querying Hermes Agent token usage, cost analytics, session history, or API call statistics from state.db."
-version: 1.1.3
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -24,18 +24,18 @@ Query Hermes Agent's `state.db` to produce token-usage reports, cost breakdowns,
 
 ## Quick Interactive Queries (ad-hoc)
 
-When the user asks "show me token usage" / "how much did I spend" / quick status checks — use the **same image pipeline as the weekly cron** (query DB, render images, send 4 section messages). The user prefers consistent image-based output.
+When the user asks "show me token usage" / "how much did I spend" / quick status checks — use the **same image pipeline as the weekly cron** (query DB, render images, send ONE message). The simplest way is to run the production script (see *Running Manually* in CLAUDE.md); `TOKEN_REPORT_TARGET` sets the channel/thread. The user prefers consistent image-based output.
 
-**Delivery rule — exactly 4 messages, nothing else:**
+**Delivery rule — exactly ONE message, nothing else** (user decision 2026-10-29; it used to be 4):
 
-| # | Content | Image |
-|---|---------|-------|
-| 1 | `## 🧠 Token Usage Report — {Month} {Year}` | no |
-| 2 | `### 📅 Last 7 Days — Daily Trends` | daily table |
-| 3 | `### 📆 Month-to-Date Totals — {Month} {Year}` | mtd table |
-| 4 | `### 🏆 All Time by Model` | alltime table |
+| Part | Content |
+|------|---------|
+| message text | `## 🧠 Token Usage Weekly Report — {Month} {Year}` |
+| embed 1 | title `📅 Last 7 Days — Daily Trends` + daily table image |
+| embed 2 | title `📆 Month-to-Date Totals — {Month} {Year}` + mtd table image |
+| embed 3 | title `🏆 All Time by Model` + alltime table image |
 
-No extra text summary, no bulleted data, no verbose recap after the images. 4 messages only.
+Each section header is its embed's title, so header and table stay paired inside the one post. No extra text summary, no bulleted data, no verbose recap. If the single post is rejected, the script falls back to the old layout (title, then one `###` header + image message per section).
 
 Key queries:
 - **Last 7 days daily**: same `strftime` + SGT grouping as the weekly report
@@ -53,15 +53,14 @@ Produced by the **production script `scripts/token_report_no_agent.py`** (self-c
 
 Do **not** add "Top 5 Sessions" or "MTD by Source" — removed intentionally. Cron: `no_agent: true`, `profile` unset, `deliver: discord:1499972245437550602`; read `references/cron-job-configuration.md` before touching it.
 
-**Message format** (every delivery — cron, manual, test):
+**Message format** (every delivery — cron, manual, test): ONE post.
 ```
-## 🧠 Token Usage Weekly Report — {Month} {Year}        ← text-only title, sent first
-
-### 📅 Last 7 Days — Daily Trends           ← each ### header + its image in ONE request
-### 📆 Month-to-Date Totals — {Month} {Year}
-### 🏆 All Time by Model
+## 🧠 Token Usage Weekly Report — {Month} {Year}        ← message text
+┃ 📅 Last 7 Days — Daily Trends                         ← embed title + attachment://section0.png
+┃ 📆 Month-to-Date Totals — {Month} {Year}              ← embed title + attachment://section1.png
+┃ 🏆 All Time by Model                                  ← embed title + attachment://section2.png
 ```
-`##` for the title, `###` for section headers — never `**bold**` headers.
+`##` for the title. Section headers are embed titles (plain text, no `###`); the fallback layout uses `###` headers — never `**bold**`.
 
 ## Querying state.db
 
@@ -102,8 +101,8 @@ data = {"daily": [["2026-06-01","4.7M","0.4M","8.8M","0.4M","6","$0.0000"], ...]
 
 Delivery is `discord_post()` in the production script — **the source of truth**; full code + rationale in `references/2026-07-delivery-hardening.md`. Target from `TOKEN_REPORT_TARGET` (`"channel_id"` or `"channel_id:thread_id"` — a thread id posts to `channels/{thread_id}/messages`; defaults to `1499972245437550602`).
 
-- One multipart request per section (title text-only, then each `###` header + its image); caption via `--form-string payload_json=` + `allowed_mentions:{"parse":[]}` — **never** `-F content=` (curl 7.88.1 truncates at `;`, reads a leading `@`/`<` as a file) and **never** `send_message`/`MEDIA:` (batches images away from text).
-- Bounded + status-checked (`--max-time 8` / `timeout=10`, one 429 retry); any failure → `os._exit(1)` so the scheduler alerts instead of the report vanishing. Clean up a PNG only after its confirmed send.
+- ONE multipart request: `payload_json` with the title as `content` plus one embed per section (`image.url = attachment://sectionN.png`), and the PNGs as `files[N]`. Fallback, only after Discord definitely rejects it (an HTTP status came back): title, then one `###` header + image request per section. A timeout is not re-sent (it may have landed). Caption via `--form-string payload_json=` + `allowed_mentions:{"parse":[]}` — **never** `-F content=` (curl 7.88.1 truncates at `;`, reads a leading `@`/`<` as a file) and **never** `send_message`/`MEDIA:` (batches images away from text).
+- Bounded + status-checked (single post `--max-time 20`, fallback posts `--max-time 8`, one 429 retry each; worst case stays under the scheduler's 120 s); any failure → `os._exit(1)` so the scheduler alerts instead of the report vanishing. Clean up a PNG only after its confirmed send.
 - Token from `~/.hermes/.env` (not `hermes-agent/.env` → 401); `[SILENT]` first stdout line; curl output captured, never printed; hold an exclusive lock via stdlib `fcntl.flock`; `os._exit(0/1)`. Deliver target `discord:1499972245437550602`, no thread.
 
 ## Skill Usage Introspection

@@ -3,7 +3,8 @@
 token_report_no_agent.py — Weekly Token Usage Report (no_agent mode)
 
 Queries state.db, renders three table images via the shared discord-table-format
-renderer, and posts them to Discord. Prints [SILENT] first so the scheduler does
+renderer, and posts them to Discord as ONE message (one embed card per table;
+per-section posts only as a fallback). Prints [SILENT] first so the scheduler does
 not re-deliver this script's stdout, holds an exclusive OS-level file lock
 (stdlib fcntl.flock — no third-party dependency) so overlapping scheduler
 ticks cannot double-fire, and hard-exits via os._exit(0 on success / 1 on a
@@ -191,8 +192,9 @@ p_alltime = render_table(
 API_URL = f'https://discord.com/api/v10/channels/{THREAD_ID or CHANNEL}/messages'
 
 
-def discord_post(content, img=None, _retried=False):
-    """Post content (+ optional image) in ONE multipart request. Returns True on 2xx.
+def discord_post(content, img=None, _retried=False, embeds=None, imgs=None, max_time=8):
+    """Post one message in ONE multipart request. Returns the HTTP status as a string
+    ('' on timeout/transport failure); callers treat a 2xx string as success.
 
     Hardened over a bare fire-and-forget curl:
       * bounded timeout — a hung/slow connection can no longer tie up the run
@@ -201,55 +203,77 @@ def discord_post(content, img=None, _retried=False):
       * body sent as `--form-string payload_json=` — curl's `-F` truncates a
         value at the first ';' and reads a leading '@'/'<' as a file to upload;
       * allowed_mentions:{"parse":[]} blocks any accidental @mention ping.
+    `embeds` + `imgs` send several images in one message: imgs[i] is uploaded as
+    files[i] and referenced from an embed as attachment://sectionN.png.
     The bot token is only ever in argv; curl's stdout/stderr are captured (never
     printed), so the [SILENT] stdout-suppression contract is preserved.
     """
-    payload = json.dumps({"content": content, "allowed_mentions": {"parse": []}})
-    # Caps chosen so the whole run (4 messages, each up to one 429 retry) stays
-    # comfortably under the scheduler's global 120s SIGKILL: worst case
-    # 4 × (2×10s + 3s) + sleeps ≈ 94s. A hung/slow connection can no longer
-    # tie up the run — and the filelock — until that SIGKILL.
-    cmd = ['curl', '-sS', '--max-time', '8', '-w', '\n%{http_code}',
+    body = {"content": content, "allowed_mentions": {"parse": []}}
+    if embeds:
+        body["embeds"] = embeds
+        body["attachments"] = [{"id": i, "filename": f"section{i}.png"} for i in range(len(imgs or []))]
+    cmd = ['curl', '-sS', '--max-time', str(max_time), '-w', '\n%{http_code}',
            '-X', 'POST', API_URL, '-H', f'Authorization: Bot {TOKEN}',
-           '--form-string', f'payload_json={payload}']
-    if img and os.path.exists(img):
+           '--form-string', f'payload_json={json.dumps(body)}']
+    if imgs:
+        for i, path in enumerate(imgs):
+            cmd += ['-F', f'files[{i}]=@{path};filename=section{i}.png;type=image/png']
+    elif img and os.path.exists(img):
         cmd += ['-F', f'file=@{img}']
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=max_time + 2)
     except subprocess.TimeoutExpired:
-        return False
-    body, _, code = r.stdout.rpartition('\n')
-    code = code.strip()
+        return ''
+    resp, _, code = r.stdout.rpartition('\n')
+    code = code.strip() if r.returncode == 0 else ''
     if code == '429' and not _retried:
         try:
-            time.sleep(min(float(json.loads(body).get('retry_after', 1)) + 0.25, 3))
+            time.sleep(min(float(json.loads(resp).get('retry_after', 1)) + 0.25, 3))
         except Exception:
             time.sleep(1)
-        return discord_post(content, img, _retried=True)
-    return r.returncode == 0 and code.startswith('2')
+        return discord_post(content, img, True, embeds, imgs, max_time)
+    return code
 
 
-# Title (text only) first.
-ok = discord_post(f'## 🧠 Token Usage Weekly Report — {month_name}')
-time.sleep(0.5)
-
-# Then each section: header + image in ONE multipart request (the only reliable
-# way to keep a header paired with its image on Discord). Skip a section whose
-# image is None (that table had no rows); clean up a PNG only once its send is
-# confirmed, so a failed delivery keeps its artifact instead of vanishing.
+title = f'## 🧠 Token Usage Weekly Report — {month_name}'
 sections = [
-    ("### 📅 Last 7 Days — Daily Trends", p_daily),
-    (f"### 📆 Month-to-Date Totals — {month_name}", p_mtd),
-    ("### 🏆 All Time by Model", p_alltime),
+    ("📅 Last 7 Days — Daily Trends", p_daily),
+    (f"📆 Month-to-Date Totals — {month_name}", p_mtd),
+    ("🏆 All Time by Model", p_alltime),
 ]
-for header, img_path in sections:
-    if not img_path:
-        continue
-    sent = discord_post(header, img_path)
-    ok = ok and sent
-    if sent and os.path.exists(img_path):
-        os.remove(img_path)
-    time.sleep(0.5)
+# A section whose image is None (that table had no rows) is skipped.
+sections = [(h, p) for h, p in sections if p and os.path.exists(p)]
+COLORS = [0x5865F2, 0x57F287, 0xFEE75C]
+
+# ONE message: the title as text, then one embed (card) per section with the section
+# header as the card title and its table inside, so each header stays paired with its
+# image within a single post (user decision 2026-10-29). Worst case for this call:
+# 2 × (20s + 3s) ≈ 46s, leaving room for the fallback inside the scheduler's 120s.
+embeds = [{"title": h, "color": COLORS[i % len(COLORS)], "image": {"url": f"attachment://section{i}.png"}}
+          for i, (h, _) in enumerate(sections)]
+code = discord_post(title, embeds=embeds, imgs=[p for _, p in sections], max_time=20)
+ok = code.startswith('2')
+
+if not ok and code and code not in ('401', '403', '404'):
+    # Discord definitely rejected the single post (a status came back), so nothing
+    # landed: fall back to the previous layout - title, then one header+image message
+    # per section. A timeout (code == '') may have landed, so it is NOT re-sent
+    # (no duplicates); the run exits 1 and the scheduler surfaces the failure.
+    print(f"token-report: single post failed (HTTP {code}); sending per-section", file=sys.stderr)
+    ok = discord_post(title).startswith('2')
+    for header, img_path in sections:
+        time.sleep(0.5)
+        ok = discord_post(f"### {header}", img_path).startswith('2') and ok
+elif not ok:
+    print(f"token-report: single post failed ({code or 'timeout'})", file=sys.stderr)
+
+# Clean up the PNGs only after a confirmed delivery, so a failure keeps its artifacts.
+if ok:
+    for _, img_path in sections:
+        try:
+            os.remove(img_path)
+        except OSError:
+            pass
 
 # ── 8. Exit ───────────────────────────────────────────────────────────────────
 # Non-zero on any delivery failure so the scheduler surfaces a "⚠️ Cron job
