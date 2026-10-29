@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.0 — 2026-10-29
+
+The tracker now arrives as **one Discord post** (user decision after reviewing a #playground sample). It used to be 1 + N posts: a text-only title, then one header+image message per category.
+
+- New `discord_post_cards()`: the title as `content`, plus one embed per category (embed title = `Category (every N days)[ — K overdue]`, image = `attachment://cardN.png`, PNGs as `files[N]`), sent in a single multipart request. `payload_json` via `--form-string`, `allowed_mentions` none, one bounded 429 retry, FatalSend on 401/403/404.
+- It returns `ok` / `rejected` / `unknown`:
+  - `rejected` (Discord answered non-2xx, so nothing was posted): falls back to the previous per-category layout.
+  - `unknown` (timeout or transport error, so it may have landed): never re-sent. The snapshot is saved, and the run exits non-zero with "check the channel before re-running".
+- Row numbers: on success (or `unknown`) every section is saved to the snapshot, because the post holds all of them. The fallback keeps the old "only the sections that arrived" rule.
+- More than 10 categories (Discord's per-message embed limit) uses the fallback layout.
+- Validated offline: success / rejection with fallback / timeout / 12 categories. Then a live post to #playground.
+
 ## 1.8.0 — 2026-09-26
 
 New `move <items> <category>` write subcommand — change an existing task's frequency in place. Until now the only path was remove + add, which resets `added`, reshuffles ordering, and costs two undo entries per task.

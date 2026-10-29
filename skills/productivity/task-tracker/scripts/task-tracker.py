@@ -318,6 +318,58 @@ def discord_post(token, cid, content, img_path=None):
         return False
     return False
 
+CARD_COLORS = [0x5865F2, 0x57F287, 0xFEE75C, 0xEB459E, 0xED4245, 0x3BA55C]
+
+def discord_post_cards(token, cid, content, cards):
+    """POST ONE message: `content` + one embed per (title, img_path) card, the images
+    uploaded as files[N] and shown via attachment://cardN.png, so every category
+    header stays paired with its table inside a single post (user decision
+    2026-10-29). Returns "ok", "rejected" (Discord answered non-2xx: nothing was
+    posted, safe to fall back) or "unknown" (timeout/transport error: it may have
+    landed, so don't re-send). Raises FatalSend on 401/403/404 like discord_post."""
+    url = DISCORD_API.format(cid=cid)
+    embeds, files = [], []
+    for title, img in cards:
+        e = {"title": title[:256], "color": CARD_COLORS[len(embeds) % len(CARD_COLORS)]}
+        if img and os.path.exists(img):
+            e["image"] = {"url": f"attachment://card{len(files)}.png"}
+            files.append(img)
+        embeds.append(e)
+    payload = json.dumps({"content": content, "embeds": embeds, "allowed_mentions": {"parse": []},
+                          "attachments": [{"id": i, "filename": f"card{i}.png"} for i in range(len(files))]})
+    cmd = ["curl", "-sS", "--max-time", str(SEND_TIMEOUT * 2), "-w", "\n%{http_code}",
+           "-X", "POST", url, "-H", f"Authorization: Bot {token}",
+           "--form-string", f"payload_json={payload}"]
+    for i, img in enumerate(files):
+        cmd += ["-F", f"files[{i}]=@{img};filename=card{i}.png;type=image/png"]
+    for attempt in range(2):  # one retry, for 429 rate-limit
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=SEND_TIMEOUT * 2 + 5)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            print(f"ERROR: Discord POST failed ({e.__class__.__name__})", file=sys.stderr)
+            return "unknown"
+        if r.returncode != 0:
+            print(f"ERROR: curl failed (rc={r.returncode}): {r.stderr.strip()}", file=sys.stderr)
+            return "unknown"
+        body, _, code = r.stdout.rpartition("\n")
+        code = code.strip()
+        if code == "429" and attempt == 0:
+            try:
+                retry = max(0.0, float(json.loads(body).get("retry_after", 1)))
+            except (ValueError, TypeError, AttributeError, json.JSONDecodeError):
+                retry = 1.0
+            if retry > MAX_RETRY_AFTER:
+                return "rejected"
+            time.sleep(retry + 0.25)
+            continue
+        if code.startswith("2"):
+            return "ok"
+        print(f"ERROR: Discord HTTP {code or '???'}: {body[:200]}", file=sys.stderr)
+        if code in ("401", "403", "404"):
+            raise FatalSend(f"Discord HTTP {code} for channel {cid}")
+        return "rejected"
+    return "rejected"
+
 def cleanup(paths):
     for p in paths:
         if not p:
@@ -997,6 +1049,27 @@ def deliver(token, cid, sections, today, target):
     if not rendered:
         sys.exit("ERROR: no images rendered")
 
+    def header(sec):
+        overdue_count = sum(1 for r in sec["rows"] if "overdue" in r[5])
+        return sec["title"] + (f" — {overdue_count} overdue" if overdue_count else "")
+
+    # ONE post: title + one embed card per category (≤10 embeds per message).
+    if len(sections) <= 10:
+        status = discord_post_cards(token, cid, title,
+                                    [(header(sec), rendered.get(sec["title"])) for sec in sections])
+        if status in ("ok", "unknown"):
+            # "unknown" may well have landed: never re-send (duplicates), but record the
+            # row numbers the user is most likely looking at.
+            save_snapshot(sections, target)
+            if status == "unknown":
+                sys.exit(f"ERROR: the post to channel {cid} timed out and may or may not have "
+                         "arrived — check the channel before re-running")
+            cleanup(list(rendered.values()))
+            print(f"Delivered {len(sections)} sections to channel {cid} (one post)", file=sys.stderr)
+            return
+        print("WARNING: single post rejected; falling back to one message per category", file=sys.stderr)
+
+    # Fallback (or more than 10 categories): the previous layout.
     failures = 0
     sent = []
     images = []
@@ -1010,11 +1083,7 @@ def deliver(token, cid, sections, today, target):
         # both in a single multipart request so they always arrive paired and ordered.
         for sec in sections:
             img_path = rendered.get(sec["title"])
-            overdue_count = sum(1 for r in sec["rows"] if "overdue" in r[5])
-            header = f"**{sec['title']}**"
-            if overdue_count:
-                header += f" — {overdue_count} overdue"
-            if discord_post(token, cid, header, img_path):
+            if discord_post(token, cid, f"**{header(sec)}**", img_path):
                 sent.append(sec)
                 if img_path:
                     images.append(img_path)  # confirmed sent → safe to delete

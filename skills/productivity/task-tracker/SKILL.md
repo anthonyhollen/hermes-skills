@@ -1,7 +1,7 @@
 ---
 name: task-tracker
 description: "Use when user asks to show, update, add, remove, move, or rename tracked recurring tasks by frequency."
-version: 1.8.0
+version: 1.9.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -33,7 +33,7 @@ Not for: appointments, calendar events, or one-off reminders.
 ```bash
 python3 $TT --target <thread>
 ```
-- The script renders image tables and posts them itself (Discord REST multipart). Do **NOT** build a Markdown table or use `send_message` / `MEDIA:`. Success prints `Delivered N sections…` to stderr; on exit ≠ 0 or any `ERROR:`/`WARNING:`, tell the user — don't fall back to a hand-made table.
+- The script renders image tables and posts them itself (Discord REST multipart) as **one post**: the title, plus one card per category with the category header as the card title and its table inside (since 1.9.0). A `WARNING: single post rejected` means it fell back to one message per category; the tracker still arrived. A `timed out and may or may not have arrived` error means: check the thread before re-running, so nothing is duplicated. Do **NOT** build a Markdown table or use `send_message` / `MEDIA:`. Success prints `Delivered N sections…` to stderr; on exit ≠ 0 or any `ERROR:`/`WARNING:`, tell the user — don't fall back to a hand-made table.
 - Delivering records the row numbers the user now sees in that thread; `done N --target <thread>` resolves against exactly that table.
 
 ## Mark done
