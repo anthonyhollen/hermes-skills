@@ -21,4 +21,4 @@
 - Test changes to the delivery path in **#playground** (`1501742338639401071`), never #alerts or the user's threads; prove a request shape without posting with a read-only `GET /channels/<id>`, or with a reject probe (empty content → 50006).
 
 ## Cron reports are different
-The two `no_agent` crons don't self-post: they print, and the scheduler delivers stdout (the morning map rides a single trailing `MEDIA:<path>` line — legitimate there, because the scheduler attaches exactly that file; it does not check the bytes, so the script validates the PNG first).
+`evening_weather.py` doesn't self-post: it prints, and the scheduler delivers stdout. `morning_commute.py` (since v1.13.0) self-posts text + map as one multipart message and prints `[SILENT]`, because the scheduler would send the `MEDIA:` image as a separate message. On a failed post it falls back to a trailing `MEDIA:<path>` line, and the scheduler attaches exactly that file. The scheduler doesn't check the bytes, so the script validates the PNG first.

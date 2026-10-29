@@ -4,6 +4,12 @@ Full dated history of bugs, fixes, and design changes for the sg-commute skill. 
 
 ---
 
+#### 2026-10-29 — Morning report + route map in ONE Discord message (v1.12.1 → v1.13.0)
+
+**User request:** the live 07:25 report arrived as two posts (text, then the map), while a test posted straight through the Discord API was a single post. **Cause:** Hermes' cron delivery sends the text, then each `MEDIA:` file as its own message (`cron/scheduler_delivery.py` `_send_media_via_adapter` → `send_image_file`), with no option to combine them. It's upstream code, so it isn't patched locally. **Fix:** `morning_commute.py`, run with no arguments (cron mode), posts text + PNG as one multipart message via `discord_post()` (bot token from `~/.hermes/.env`, `allowed_mentions` none, one bounded 429 retry, split at 1900 chars with the map on the last part). On success it prints `[SILENT]` + `Sent N/N …` + the report, so the scheduler delivers nothing and the archive keeps the text. On failure it falls back to the old stdout + `MEDIA:` path. A destination argument stays print-only; `--post-to <channel_id>` posts a test copy elsewhere. Validated offline (success / HTTP 500 fallback / 429 retry / print-only / `--post-to` / 3-part split), and against Hermes' `is_autonomous_silence_response` (our output → silent, a normal report → delivered). Then a live `--post-to` run to the playground.
+
+---
+
 #### 2026-10-29 — PM2.5 legend: an emoji for every band (v1.12.0 → v1.12.1)
 
 **User request:** the 50–99 and 100+ bands had no emoji in the morning report's air-quality legend. `morning_commute.py` `pm_level` + the `section4` legend now tag 🟠 20–49 Unhealthy (Sensitive) (was 🔴), 🔴 50–99 Unhealthy (was 🔴, unlabelled in the legend), 🟣 100+ Very Unhealthy (was 🔴, unlabelled). 0–9 🟢 and 10–19 🟡 unchanged. The same emoji is used for the East / regional-average readings, so a reading and its legend band always match. First change shipped through the hermes-skills repo (Mac → GitHub → Pi sync); test report posted to the playground channel.

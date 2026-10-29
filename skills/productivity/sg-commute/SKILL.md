@@ -1,7 +1,7 @@
 ---
 name: sg-commute
 description: Singapore parking / car park finder (live HDB, LTA and URA lots + EV chargers near a postal code or address, posted to Discord) plus commute routes, weather/rain/PM2.5 and the morning/evening commute reports.
-version: 1.12.1
+version: 1.13.0
 author: Nous Research
 license: MIT
 metadata:
@@ -32,9 +32,9 @@ PYTHONUNBUFFERED=1 python3 /home/amh/.hermes/skills/productivity/sg-commute/scri
 | Morning Commute Report | `b617d89da15b` | 07:25 Tue/Wed/Thu (all → Innovis; AMK on file, unscheduled) | `morning_commute.py` |
 | Evening Weather Forecast | `c967008ca121` | 22:00 Mon/Tue/Wed | `evening_weather.py` |
 
-Both print the report to stdout; the scheduler delivers it to #alerts (`deliver: discord:1499972245437550602`), and the morning route map rides a trailing `MEDIA:/tmp/route_<dest>.png` line.
+Both deliver to #alerts (`deliver: discord:1499972245437550602`). The evening script prints and the scheduler posts. The morning script (no args) posts report + map itself as **one** message and prints `[SILENT]`; if that post fails, it prints the report + `MEDIA:` and the scheduler delivers instead (two messages).
 - **To change what a report says, edit the script** — the job's `prompt` is not read for `no_agent` jobs. To change a schedule/target use `hermes cron edit <id> …`; never hand-edit `~/.hermes/cron/jobs.json` (the gateway rewrites it).
-- **Test off-schedule without posting:** `~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/morning_commute.py innovis|amk` (with no argument it is silent outside Tue–Thu — that's not a failure) and `… evening_weather.py`.
+- **Test off-schedule without posting:** `morning_commute.py innovis|amk` (a destination argument = print only) and `evening_weather.py`. **Never run `morning_commute.py` with no argument by hand on Tue–Thu: that is cron mode and posts to #alerts.** Outside Tue–Thu it is silent, which is not a failure. To post a test copy, add `--post-to <channel_id>` (e.g. the playground).
 - **Destination by day = `SCHEDULE` in `morning_commute.py`** (weekday → `"innovis"`/`"amk"`); the addresses, rain stations and route rules live in `DEST_PROFILES`. Wed moved AMK → Innovis on 2026-10-14; to put AMK back on a day, set that day to `"amk"` in `SCHEDULE` (a day outside Tue–Thu also needs `hermes cron edit b617d89da15b --schedule …`). Before re-sending a "missing" report, check `~/.hermes/cron/output/<job_id>/` for a fresh run (double-delivery).
 - Formats and per-section logic: `references/commute-report.md` (morning) and `references/evening-weather-workflow.md` (evening).
 

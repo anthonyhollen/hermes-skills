@@ -2,9 +2,17 @@
 """Morning Commute Report (job b617) — no_agent replacement.
 
 Computes the SG morning commute report (weather, rain, air quality, traffic-
-aware route + static map) and prints it to stdout ending with a MEDIA: tag.
-The cron system auto-delivers stdout + the referenced PNG to Discord
-(deliver=discord:...), so this script does NOT call the Discord API itself.
+aware route + static map).
+
+Modes:
+  (no args)            cron mode: posts report + map to #alerts itself as ONE Discord
+                       message, then prints [SILENT] (+ the report, for the cron
+                       archive) so the scheduler delivers nothing. The scheduler can't
+                       do this: it sends text, then each MEDIA: file as its own message.
+                       If the post fails, falls back to printing the report + a MEDIA:
+                       tag for the scheduler to deliver (two messages, but not lost).
+  innovis|amk          print only (testing; posts nothing). Same for env DEST.
+  [dest] --post-to ID  post to channel ID (e.g. the playground) instead of #alerts.
 
 Ported from skills/productivity/sg-commute/references/commute-report.md.
 Each section is wrapped in try/except so one failing upstream API degrades
@@ -15,7 +23,7 @@ Destination is derived from the weekday via SCHEDULE (Tue/Wed/Thu→Innovis sinc
 back on any day by editing SCHEDULE. Override for testing with argv[1] in
 {innovis, amk} or env DEST.
 """
-import json, math, os, re, subprocess, sys, time, urllib.parse
+import json, math, os, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -23,6 +31,7 @@ ORIGIN = "Pasir Ris Grove Singapore"
 INNOVIS = "2 Fusionopolis Way, Singapore 138634"
 AMK = "12 Ang Mo Kio Street 64, Singapore 569088"
 SGT = timezone(timedelta(hours=8))
+ALERTS_CHANNEL = "1499972245437550602"   # #alerts; same as the cron job's deliver target
 
 # Destination profiles: slug → (label, address, slug, rain station, station name, dist).
 # Keep AMK here even while no day uses it — its route (direct, ≥8 km floor) and
@@ -573,9 +582,65 @@ def section5(label, address, slug):
         return "**5. Commute to %s** - *route unavailable (%s)*" % (label, _safe_err(e)), None
 
 
+def discord_post(channel, text, png=None):
+    """Post the report as one message (text + map attached); split only if the text
+    exceeds Discord's 2000-char limit, map on the last part. Returns (ok, note)."""
+    token = _env_val("DISCORD_BOT_TOKEN")
+    if not token:
+        return False, "no DISCORD_BOT_TOKEN"
+    chunks, cur = [], ""
+    for line in text.split("\n"):
+        if cur and len(cur) + len(line) + 1 > 1900:
+            chunks.append(cur)
+            cur = ""
+        cur += line + "\n"
+    chunks.append(cur)
+    for i, chunk in enumerate(chunks):
+        payload = json.dumps({"content": chunk.strip(), "allowed_mentions": {"parse": []}}).encode()
+        if png and i == len(chunks) - 1:
+            b = uuid.uuid4().hex.encode()
+            with open(png, "rb") as f:
+                img = f.read()
+            body = (b"--" + b + b'\r\nContent-Disposition: form-data; name="payload_json"\r\n'
+                    b"Content-Type: application/json\r\n\r\n" + payload + b"\r\n--" + b +
+                    b'\r\nContent-Disposition: form-data; name="files[0]"; filename="route_map.png"\r\n'
+                    b"Content-Type: image/png\r\n\r\n" + img + b"\r\n--" + b + b"--\r\n")
+            ctype = "multipart/form-data; boundary=" + b.decode()
+        else:
+            body, ctype = payload, "application/json"
+        for attempt in range(2):
+            req = urllib.request.Request(
+                "https://discord.com/api/v10/channels/%s/messages" % channel, data=body,
+                headers={"Authorization": "Bot " + token, "Content-Type": ctype,
+                         "User-Agent": "DiscordBot (hermes-morning-commute, 1.0)"})
+            try:
+                urllib.request.urlopen(req, timeout=30).read()
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt == 0:   # rate-limited: one bounded retry
+                    try:
+                        wait = float(json.loads(e.read() or b"{}").get("retry_after", 2))
+                    except Exception:
+                        wait = 2.0
+                    time.sleep(min(max(wait, 0.5), 10))
+                    continue
+                return False, "part %d/%d: HTTP %s" % (i + 1, len(chunks), e.code)
+            except Exception as e:
+                return False, "part %d/%d: %s" % (i + 1, len(chunks), e.__class__.__name__)
+        time.sleep(0.5)
+    return True, "Sent %d/%d to %s%s" % (len(chunks), len(chunks), channel, " (+map)" if png else "")
+
+
 def main():
-    override = (sys.argv[1].lower() if len(sys.argv) > 1 else
-                os.environ.get("DEST", "")).strip().lower()
+    args = sys.argv[1:]
+    post_to = None
+    if "--post-to" in args:
+        i = args.index("--post-to")
+        post_to = args[i + 1] if i + 1 < len(args) else None
+        del args[i:i + 2]
+        if not post_to:
+            sys.exit("usage: morning_commute.py [innovis|amk] [--post-to CHANNEL_ID]")
+    override = (args[0] if args else os.environ.get("DEST", "")).strip().lower()
     if override in DEST_PROFILES:
         meta = DEST_PROFILES[override]
     else:
@@ -603,14 +668,25 @@ def main():
         f5 = ex.submit(section5, label, address, slug)
         s1, s2, s3, s4 = f1.result(), f2.result(), f3.result(), f4.result()
         s5, png = f5.result()
-    parts = ["## ☀️ Morning Commute Update", "", s1, "",
-             s2, "", s3, "",
-             s4, "", s5]
-    # The (Map polyline …) legend at the end of s5 stays the last text row;
-    # the MEDIA tag (stripped from the delivered text, image attached) follows.
-    if png:
-        parts.append("MEDIA:%s" % png)
-    print("\n".join(parts))
+    text = "\n".join(["## ☀️ Morning Commute Update", "", s1, "",
+                      s2, "", s3, "",
+                      s4, "", s5])
+    # Cron mode (no destination override) and --post-to self-post; an override
+    # alone stays print-only so off-schedule test runs never reach #alerts.
+    if post_to is None and not override:
+        post_to = ALERTS_CHANNEL
+    if post_to:
+        ok, note = discord_post(post_to, text, png)
+        if ok:
+            # [SILENT] on the first line = the scheduler delivers nothing; the
+            # rest of stdout is kept in the cron output archive.
+            print("[SILENT]\n%s\n\n%s" % (note, text))
+            return
+        print("morning_commute: self-post failed (%s); scheduler delivers instead" % note,
+              file=sys.stderr)
+    # Print-only, or the fallback after a failed self-post: the scheduler posts the
+    # text, then attaches the MEDIA file as a separate message.
+    print(text + ("\nMEDIA:%s" % png if png else ""))
 
 
 if __name__ == "__main__":

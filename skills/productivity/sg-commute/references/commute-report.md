@@ -1,6 +1,6 @@
 # Morning Commute Report
 
-> **🔄 As of 2026-05-31 this report runs as a `no_agent` cron script: `~/.hermes/scripts/morning_commute.py` (job `b617d89da15b`).** No LLM agent is involved and this skill is not loaded at runtime. The script implements everything documented below and prints the report to stdout (ending with `MEDIA:/tmp/route_<dest>.png`); the cron system auto-delivers the text + map image to #alerts. **`morning_commute.py` is the source of truth** — this reference documents the logic/format it implements. The `send_message` / `execute_code` delivery patterns below now apply only to manual/ad-hoc runs.
+> **🔄 As of 2026-05-31 this report runs as a `no_agent` cron script: `~/.hermes/scripts/morning_commute.py` (job `b617d89da15b`).** No LLM agent is involved and this skill is not loaded at runtime. The script implements everything documented below and, since v1.13.0, posts the report + route map to #alerts itself as **one** Discord message, then prints `[SILENT]` (+ the report, kept in the cron archive) so the scheduler delivers nothing. The scheduler can't combine them: it sends the text, then each `MEDIA:` file as a separate message (`_send_media_via_adapter`). If the self-post fails it falls back to printing the report + `MEDIA:` for the scheduler (two messages, not lost). **`morning_commute.py` is the source of truth** — this reference documents the logic/format it implements. The `send_message` / `execute_code` delivery patterns below now apply only to manual/ad-hoc runs.
 
 Daily morning commute report sent to Discord channel `1499972245437550602` (#alerts) at **07:25 SGT** on Tue/Wed/Thu (cron `25 7 * * 2,3,4`).
 
@@ -45,7 +45,7 @@ The exact current output (all variants of each line) is in `developer-guide.md` 
 *(Map polyline: 🟢 light / 🟡 moderate / 🔴 heavy / 🔵 no data)*
 MEDIA:/tmp/route_<dest>.png
 ```
-(The `MEDIA:` line is stripped by the scheduler and the PNG attached; it is emitted only when curl exited 0 and the file has both the PNG signature and the IEND trailer.)
+(The `MEDIA:` line appears only in print-only runs and the self-post fallback; the scheduler strips it and attaches the PNG as a separate message. The map is used only when curl exited 0 and the file has both the PNG signature and the IEND trailer.)
 
 ## Section Details
 
@@ -206,4 +206,4 @@ url = "https://maps.googleapis.com/maps/api/staticmap?" + "&".join(query_parts)
 
 ## Discord Delivery
 
-The cron job has `deliver: "discord:1499972245437550602"`: the scheduler posts `morning_commute.py`'s stdout verbatim and attaches the file named on the trailing `MEDIA:` line. The script never calls Discord itself. To look at a report without posting it, run the script by hand (it only prints). The agent-mode delivery patterns that used to be documented here (`send_message`, the two-call `execute_code` + `requests` pattern) were removed on 2026-09-29 — they are archived in `changelog.md` → *Relocated 2026-09-29*.
+The cron job has `deliver: "discord:1499972245437550602"`. Since v1.13.0 the script, run with no arguments (cron mode), posts the report + route map to #alerts itself as **one** Discord message, then prints `[SILENT]` (+ the report, kept in the cron archive) so the scheduler delivers nothing. The scheduler can't combine them: it sends the text, then each `MEDIA:` file as a separate message (`_send_media_via_adapter`). If the self-post fails it falls back to printing the report + `MEDIA:` for the scheduler (two messages, not lost). `ALERTS_CHANNEL` in the script must match the job's deliver target. To look at a report without posting it, run `morning_commute.py innovis|amk` (a destination argument = print only). To post a test copy somewhere else, run `morning_commute.py innovis --post-to <channel_id>`. The agent-mode delivery patterns that used to be documented here (`send_message`, the two-call `execute_code` + `requests` pattern) were removed on 2026-09-29 — they are archived in `changelog.md` → *Relocated 2026-09-29*.

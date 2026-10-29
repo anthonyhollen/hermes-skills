@@ -35,7 +35,7 @@ Singapore commute planner delivering a daily morning report and evening weather 
 | Morning Commute Report | `b617d89da15b` | 07:25 SGT Tue/Wed/Thu | `discord:1499972245437550602` | `no_agent` → `~/.hermes/scripts/morning_commute.py` |
 | Evening Weather Forecast | `c967008ca121` | 22:00 SGT Mon/Tue/Wed | `discord:1499972245437550602` | `no_agent` → `~/.hermes/scripts/evening_weather.py` |
 
-**As of 2026-05-31 both jobs run as `no_agent` scripts (no LLM, skill not loaded at runtime).** The scripts live in **`~/.hermes/scripts/`** (the cron scripts dir — NOT the skill's `scripts/`, which holds only `nearest_carpark.py`); the scheduler runs them with the gateway venv interpreter. They print the report to stdout and cron auto-delivers it (plus the commute `MEDIA:` image, which `extract_media` attaches) to #alerts. The notes below about agent output/`send_message` apply only to manual runs.
+**As of 2026-05-31 both jobs run as `no_agent` scripts (no LLM, skill not loaded at runtime).** The scripts live in **`~/.hermes/scripts/`** (the cron scripts dir — NOT the skill's `scripts/`, which holds only `nearest_carpark.py`); the scheduler runs them with the gateway venv interpreter. The evening script prints the report and cron delivers it to #alerts. The morning script self-posts text + map as one message and prints `[SILENT]` (v1.13.0; see *Crons* below). The notes below about agent output/`send_message` apply only to manual runs.
 
 **Destination by day:** Tuesday / Wednesday / Thursday → Innovis (Wednesday was AMK until 2026-10-14). Set in `SCHEDULE` (weekday → slug) in `morning_commute.py`; the per-destination data (label, address, rain station) is in `DEST_PROFILES`, where AMK stays on file — restore it to a day with e.g. `2: "amk"` (a day outside Tue–Thu also needs the cron schedule extended).
 
@@ -311,7 +311,7 @@ The old single-digit split (`pi // 100000`) probed scattered sectors (03/13/23 f
 
 ## Discord Delivery Rules
 
-**Crons:** both use `deliver: "discord:1499972245437550602"`; the `no_agent` script prints the report to stdout and the scheduler posts it (and attaches the file on a trailing `MEDIA:<path>` line — that is the one legitimate `MEDIA:` use; the scheduler does no magic-byte check, so the script validates the PNG). Non-zero exit → the scheduler posts a failure alert; empty stdout → silent. Never add a Discord call to a cron script (double delivery).
+**Crons:** both use `deliver: "discord:1499972245437550602"`. `evening_weather.py` prints the report to stdout and the scheduler posts it. `morning_commute.py` (no args = cron mode) posts the report + route map to #alerts itself as **one** Discord message, then prints `[SILENT]` (+ the report, kept in the cron archive) so the scheduler delivers nothing. The scheduler can't combine them: it sends the text, then each `MEDIA:` file as a separate message (`_send_media_via_adapter`). If the self-post fails it falls back to printing the report + `MEDIA:` for the scheduler (two messages, not lost). Non-zero exit → the scheduler posts a failure alert; empty stdout or a `[SILENT]` first line → nothing delivered. A cron script that calls Discord itself **must** print `[SILENT]` first on success, or the scheduler double-delivers. The scheduler does no magic-byte check on `MEDIA:` files, so the script validates the PNG.
 
 **Interactive parking reports:** `nearest_carpark.py … --send` is the only delivery path — see `references/discord-image-delivery.md` (target resolution from `HERMES_SESSION_KEY`, nonce-safe retries, the `[SILENT]` / `DELIVERY FAILED` / `PARTIAL DELIVERY` contract). The agent must not hand-post with curl or read the bot token (a 2026-07-16 session did, printing the token into the session log).
 
@@ -347,7 +347,7 @@ The old single-digit split (`pi // 100000`) probed scattered sectors (03/13/23 f
 • Current: ~<ZZ> min (traffic-aware) <🟢|🟡|🔴>      (or "*(traffic data unavailable)*")
 
 *(Map polyline: 🟢 light / 🟡 moderate / 🔴 heavy / 🔵 no data)*
-MEDIA:/tmp/route_<innovis|amk>.png                   (only when a complete PNG was fetched)
+MEDIA:/tmp/route_<innovis|amk>.png                   (print-only/fallback; cron mode attaches it to the same message)
 ```
 A section that fails renders `**N. …** - *unavailable (<short reason>)*` — the reason goes through `_safe_err` (exception text can contain the key-bearing request URL). Directions retries only a transient status (`OVER_QUERY_LIMIT`/`UNKNOWN_ERROR`/no response); a definitive error shows as e.g. `route unavailable (no route available — Directions REQUEST_DENIED)`. Rain bands apply only when `readingType` says "5 Minute"; the flood line says "status unavailable" on a failed/empty/odd-shaped payload.
 
