@@ -5,6 +5,16 @@ what the agent needs to *act*; the war stories live here.
 
 ---
 
+## v3.5.2 — 2026-11-04 — Every high-value amount is bold
+
+The high-value section announced ">$100" but bolded only the rows over **S$200**
+(`bold = "**" if amt > 200 else ""`), so the same list mixed bold and plain
+amounts — the Nov-2026 review showed S$2,939.86 / S$1,628.46 / S$465.40 bold
+while S$373.87 … S$118.85 were plain. Every row in the section is now wrapped
+`**S$…**`, matching the user's standing rule that bold amounts wrap the whole
+amount. No other section changed; selftest unchanged (290 passed / 6
+pre-existing session-env failures, identical before and after).
+
 ## v3.5.1 — 2026-10-04 — Follow-up to the first live run
 
 Review of the first real upload under v3.5.0 (2026-10-03 21:24, thread

@@ -1,7 +1,7 @@
 ---
 name: cc-bill-review
 category: productivity
-version: 3.5.1
+version: 3.5.2
 description: Review OCBC credit card statements (cards 5999 / 7008) — import the bill PDFs, flag high-value / foreign / annual-fee / new-merchant charges, handle "approve #…" replies, and send automatic payment-due reminders.
 triggers:
   - "review my credit card bill"

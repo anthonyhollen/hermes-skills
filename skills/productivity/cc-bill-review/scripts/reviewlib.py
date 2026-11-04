@@ -327,9 +327,10 @@ def render_statement_ex(cur, card: str, ym: str, stmt_date: str, due_date: str,
     if hv:
         out.append("**🔴 High-value (>$100):**")
         for txn_dt, merchant, amt, ccy in hv:
-            bold = "**" if amt > 200 else ""
+            # Every high-value row is bolded: the section is ">$100", so bolding
+            # only the >$200 subset rendered the same list inconsistently.
             ccy_suffix = f" | {ccy}" if ccy else ""
-            out.append(f"  {txn_dt} | {bold}S${amt:,.2f}{bold} | {esc_md(merchant)}{ccy_suffix}")
+            out.append(f"  {txn_dt} | **S${amt:,.2f}** | {esc_md(merchant)}{ccy_suffix}")
         out.append("")
 
     af = annual_fee(cur, card, ym)
