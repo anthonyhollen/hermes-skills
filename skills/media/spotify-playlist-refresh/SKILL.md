@@ -156,9 +156,16 @@ XDG_RUNTIME_DIR=/run/user/$(id -u)` before `systemctl --user status|restart
 spotify-sampler` over SSH; restart it after changing `src/`.
 
 **Always use the wrapper scripts** — the `script` field is a filename; inline
-code causes "Script not found". Wrappers force-refresh the token via Hermes
-(`resolve_spotify_runtime_credentials(force_refresh=True)`), write it to
-`auth.json` atomically, then run the entrypoint. Never use `auth._do_refresh()`
+code causes "Script not found". Wrappers force-refresh the token via
+`resolve_spotify_runtime_credentials(force_refresh=True)`, write it to
+`auth.json` atomically, then run the entrypoint. In the current install
+`hermes_cli.auth` no longer exports that name, so the wrappers fall back to the
+`spotify` plugin's `spotify_auth.resolve_runtime_credentials` (plugin dir
+inserted on `sys.path`). That fallback is the refresh job's **only** plugin
+dependency: playlist-tool changes in a plugin update cannot affect it, but
+confirm `spotify_auth.resolve_runtime_credentials` still exists with the same
+signature before applying one (`hermes plugins check-updates` is read-only;
+review recipe: the `plugin-update-review` reference in the `hermes-agent` skill). Never use `auth._do_refresh()`
 for PKCE tokens (`400 invalid_client`). Update a job:
 `cronjob(action="update", job_id="<id>", script="spotify_refresh_wrapper.py")`.
 Job IDs, schedule history, output contract: `references/cron-wrappers.md`.
