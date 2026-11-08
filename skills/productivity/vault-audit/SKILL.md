@@ -2,7 +2,7 @@
 name: vault-audit
 category: productivity
 version: 1.3.1
-description: Run the vault audit — check the Obsidian vault for drift against live ground truth (config, cron, installed skills, VIP roster); auto-fixes machine-verifiable facts, flags the rest. Also: clean up MEMORY.md against the vault.
+description: 'Run the vault audit — check the Obsidian vault for drift against live ground truth (config, cron, installed skills, VIP roster); auto-fixes machine-verifiable facts, flags the rest. Also: clean up MEMORY.md against the vault.'
 author: ham
 triggers:
   - "audit the vault"
@@ -66,6 +66,12 @@ Two severities — `references/checks.md` has the full registry and how to add a
 - Source of truth for skill categorisation is each skill's **own note** (its origin marker); the MOC mirrors the notes.
 
 ## Handling review items
+Review findings are never touched by `--fix` — fix them in the note, then rerun the detect-only command until it
+prints `✓ Vault in sync` (exit 0). Back up each note first to `<note>.bak-manual-<YYYYmmdd_HHMM>`, and edit only the
+line the finding names.
+- **Active job missing from Routines** — add a row from `jobs.json`: `| <id> | <name> | <schedule gloss> (<expr>) | <script> | <skill link> |`. Derive the last cell from the job's `deliver`: `local` needs no arrow; `discord:<id>` → `→ Discord <id>`, matching the existing rows. Fix the `**N active + M paused**` header in the same pass — adding rows alone leaves the count finding red.
+- **Archived skill not listed in the MOC** — the check only counts bare backticked names (`[\w.-]+`) in `## Archived`. A `[[wikilink]]` or a path containing `/` does not satisfy it; list the archive directory name itself, e.g. `traffic-camera`.
+- **Skill note references an install path that is gone** — if the skill is archived, rewrite the path to `~/.hermes/skills/.archive/<name>` (the check accepts any path that exists on disk, so the `(vX.Y.Z)` beside it is fine); if it was renamed, point at the new install path.
 - "Routines row … has no job in jobs.json" — ask Ham whether the job was deleted on purpose before touching the row or
   any cron output; it can mean a job vanished.
 - "could not read / not verified" — the check did not run; fix the note or file, don't treat the run as clean.

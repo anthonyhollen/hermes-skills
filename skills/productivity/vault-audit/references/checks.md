@@ -35,13 +35,13 @@ item and every cron check is skipped. It is never treated as "no jobs".
 | `cron-ref` | review | every other note | a backticked 12-hex job id no longer in jobs.json; on a line naming exactly one known job, a cron expr (compared semantically) or single HH:MM that disagrees with it |
 | `cron-output-orphan` | auto | system | `cron/output/<id>/` (12-hex real dir, not a symlink) whose job is gone ⇒ `--fix` MOVES it to `~/.hermes/scripts/.vault_audit_orphans/<ts>/` (pruned after 30 days). Refused (review) when jobs.json is unknown, lists no jobs, has non-12-hex ids, or > max(3, 25%) of dirs look orphaned |
 | `skill-version` | auto | per-skill note | the `(vX.Y.Z)` next to the skill's install path (raw frontmatter text — `1.10` stays `1.10`) |
-| `skill-path` | review | per-skill note | — (a documented skill whose install dir is gone) |
+| `skill-path` | review | per-skill note | — (a documented skill whose install dir is gone). For an archived skill, rewrite the path to `~/.hermes/skills/.archive/<name>` — the check accepts any relative path that exists on disk |
 | `moc` | auto | Skills MOC | rebuilds "Built by Ham" / "Bundled" lists from each note's origin marker (preserves the real section header text) |
 | `vip` | review | Anthony (Ham), Email Gmail Triage | — (relationships are subjective); a roster line that parses to nothing ⇒ review |
 | `env` | review | API Reference | — (never auto-touch the keys area); unreadable `.env` ⇒ review, not false findings |
 | `ids` | review | Operations, Anthony (Ham) | — (channel changes span many notes; report only) |
 | `links` | review | all notes | — resolved like Obsidian: by basename, `.md`-less, case-insensitive; `![[embeds]]`, links inside code, `\|` aliases in tables handled |
-| `archive` | review | Skills MOC → `## Archived` | exact backticked names in that section, both directions (archived-but-unlisted, listed-but-not-archived) |
+| `archive` | review | Skills MOC → `## Archived` | exact backticked names in that section, both directions (archived-but-unlisted, listed-but-not-archived). Only bare `[\w.-]+` tokens count: a `[[wikilink]]` or a path containing `/` is invisible to the check, so list the archive directory name itself |
 | `learned` | auto / review | per-rule note | data-driven rules from `learned_rules.json` (the feedback loop) — see `drift-patterns.md`. Evaluated in a child process with a 30 s budget (Python's `re` can't be interrupted) that reports rule by rule — a timeout keeps the finished rules' findings and names the slow rule; a rule it can't verify (truth path / anchor not found, unknown kind, credential-looking path) is reported; every anchor match must agree with the truth |
 | `vault` / `state` / `prune` | review | (audit) | a core note that can't be read, a malformed recurrence state (backed up + reset), an unlistable quarantine — the audit reports what it could NOT check |
 
