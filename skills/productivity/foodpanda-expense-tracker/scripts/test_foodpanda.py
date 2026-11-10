@@ -193,7 +193,8 @@ def run_sync(msgs, bodies, state=None, deadline_at_read=False, alert_fail=False,
     class Svc:
         def spreadsheets(self): return self
         def values(self): return self
-        def get(self, **k): return Req(lambda: {"sheets": [{"properties": {"title": t}} for t in SHEET]})
+        def get(self, **k): return Req(lambda: {"sheets": [{"properties": {"title": t, "sheetId": 100 + i}}
+                                                          for i, t in enumerate(SHEET)]})
         def batchGet(self, **k):
             calls.append(["batchGet"])
             return Req(lambda: {"valueRanges": [{"values": SHEET[r.rsplit("!", 1)[0][1:-1].replace("''", "'")]}
@@ -212,7 +213,16 @@ def run_sync(msgs, bodies, state=None, deadline_at_read=False, alert_fail=False,
                     rows[start + i - 1] = [str(x) for x in v]
             return Req(lambda: {})
         def batchUpdate(self, **k):
-            writes.append("batchUpdate"); return Req(lambda: {})
+            writes.append("batchUpdate")
+            for req in k.get("body", {}).get("requests", []):
+                ins = req.get("insertDimension")
+                if ins:                     # reflect the row INSERT in the fake sheet
+                    idx = ins["range"]["sheetId"] - 100
+                    tab = list(SHEET)[idx]
+                    for _ in range(ins["range"]["endIndex"] - ins["range"]["startIndex"]):
+                        SHEET[tab].insert(ins["range"]["startIndex"], [])
+            return Req(lambda: {})
+    sync._sheet_gid_cache = {}
     sync.run_gapi = gapi
     sync.get_sheets_service = lambda: Svc()
     sync.urllib.request.urlopen = fake_urlopen([http_err(403)] * 50 if alert_fail else [], posts)
@@ -287,6 +297,47 @@ code, posts, calls, writes, st = run_sync([msg("new3", "FP", 22)], {"new3": fp_o
                                           deadline_at_read=True)
 check("sync: past the run deadline the failure is still POSTED (alerts aren't deadline-gated)",
       len(posts) >= 1, (code, posts))
+
+# ── reconcile: a manual edit that wipes cron-written rows is repaired ─────────
+SHEET["Nov 2026"] = [["Date", "Merchant", "Amount", "Email ID", "Order ID", "Provider", "MTD Total"],
+                     ["2026-11-02", "Giant", "64.99", "manual", "", "FoodPanda", ""],
+                     ["2026-11-09", "Khao Hom", "43.5", "keep1", "yxi5", "FoodPanda", ""]]
+sync.sgt_now = lambda: datetime(2026, 11, 10, 23, 30, tzinfo=sync.SGT)
+nov_body = fp_ok.replace("abcd-1234", "gone-order").replace("2026-09-21", "2026-11-07")
+nov_state = {"providers": {"FoodPanda": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"},
+                           "Grab": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"}},
+             "tab_snapshot": {"Nov 2026": [["gone1", "FoodPanda"], ["keep1", "FoodPanda"]]}}
+code, posts, calls, writes, st = run_sync([], {"gone1": nov_body}, state=nov_state)
+restored_rows = [r for r in SHEET["Nov 2026"] if len(r) > 3 and r[3] == "gone1"]
+check("sync: a row wiped by a manual edit is restored from its Gmail receipt",
+      code == 0 and len(restored_rows) == 1 and restored_rows[0][1] == "Giant (Tampines North)"
+      and any("Restored" in json.dumps(p, ensure_ascii=False) for p in posts), (code, SHEET["Nov 2026"], posts))
+check("sync: reconcile never duplicates a row that survived, and counts the restore",
+      sum(1 for r in SHEET["Nov 2026"] if len(r) > 3 and r[3] == "keep1") == 1
+      and st.get("restored_counts", {}).get("gone1") == 1, (SHEET["Nov 2026"], st))
+check("sync: 'manual' Email-ID markers are never tracked as restorable message ids",
+      all(mid != "manual" for mid, _p in st["tab_snapshot"]["Nov 2026"]), st["tab_snapshot"])
+check("sync: a restored row is INSERTED in date order, not appended at the bottom",
+      [r[0] for r in SHEET["Nov 2026"][1:4]] == ["2026-11-02", "2026-11-07", "2026-11-09"],
+      SHEET["Nov 2026"][:5])
+
+code, posts, calls, writes, st = run_sync([], {}, state={
+    "providers": {"FoodPanda": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"},
+                  "Grab": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"}},
+    "tab_snapshot": {"Nov 2026": [["keep1", "FoodPanda"], ["gone1", "FoodPanda"]]}})
+check("sync: an intact tab → no restore, no write, no alert",
+      code == 0 and not any("Restored" in json.dumps(p, ensure_ascii=False) for p in posts)
+      and not [w for w in writes if w.startswith("'Nov 2026'!A")], (code, writes, posts))
+
+code, posts, calls, writes, st = run_sync([], {}, state={
+    "providers": {"FoodPanda": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"},
+                  "Grab": {"last_checked_email_ts": "2026-11-09T23:00:00+08:00"}},
+    "tab_snapshot": {"Nov 2026": [["gone2", "FoodPanda"], ["keep1", "FoodPanda"]]},
+    "restored_counts": {"gone2": sync.RECONCILE_MAX_RESTORES}})
+check("sync: a receipt deleted 3× is left out (no write) and says so once",
+      code == 0 and not [w for w in writes if w.startswith("'Nov 2026'!A")]
+      and any("keep disappearing" in json.dumps(p, ensure_ascii=False) for p in posts)
+      and "gone2" in st.get("reconcile_blocked_ids", []), (code, writes, posts, st))
 
 # ── weekly: previous complete week, Sunday included, exit codes ───────────────
 check("weekly: Sunday 4 Oct → Sun 27 Sep – Sat 3 Oct", weekly.week_range(date(2026, 10, 4)) == (date(2026, 9, 27), date(2026, 10, 3)))

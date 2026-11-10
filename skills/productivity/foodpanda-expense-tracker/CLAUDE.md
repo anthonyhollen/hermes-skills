@@ -36,8 +36,9 @@ The rest of the flow (dedup, sheet, Discord, watermark) is generic. Adding a pro
 - `SGT = UTC+8` (all date logic)
 - `PROVIDERS` (sync only) — see above; per-provider `lookback` replaces the old single `LOOKBACK`. Grab also has `nonfood_re` (ride receipts → skipped).
 - Timeout budget: `CALL_TIMEOUT` (sync 30, weekly/reminder 20) and `RUN_DEADLINE_SECS = 300` in all three (see the timeout gotcha).
+- `RECONCILE_MAX_RESTORES = 3`, `RECONCILE_EMBED_MAX = 15` (sync) — the vanished-row safety net.
 - `KNOWN_PROVIDERS` (weekly only) — provider names to label; unknown values in col F are treated as unlabelled (tolerates un-migrated tabs).
-- State: `~/.hermes/foodpanda_sync_state.json` → **per-provider** `{"providers": {"<name>": {"last_checked_email_ts": iso}}, "reported_skip_ids": [...]}`. `load_state()` migrates the old flat `{"last_checked_email_ts": ...}` schema → FoodPanda's watermark. `reported_skip_ids` dedups the parse/foreign alerts across runs (see Gotchas).
+- State: `~/.hermes/foodpanda_sync_state.json` → **per-provider** `{"providers": {"<name>": {"last_checked_email_ts": iso}}, "reported_skip_ids": [...], "tab_snapshot": {"Nov 2026": [[msg_id, provider], ...]}, "restored_counts": {msg_id: n}, "reconcile_blocked_ids": [...]}`. `load_state()` migrates the old flat `{"last_checked_email_ts": ...}` schema → FoodPanda's watermark. `reported_skip_ids` dedups the parse/foreign alerts across runs (see Gotchas). `tab_snapshot` is the reconcile memory (current month + previous while it exists); `restored_counts`/`reconcile_blocked_ids` implement the 3-strike guard.
 
 ## Sheet layout (v1.4.0)
 
@@ -65,6 +66,7 @@ The rest of the flow (dedup, sheet, Discord, watermark) is generic. Adding a pro
 9. **Verify writes** by reading back the last N rows for the new email ids; a failed read of an existing sheet aborts that month (never treated as empty → no duplicate re-append).
 10. Post combined Discord summary + MTD; each line tagged with its provider. Updated rows get `🔄 _(updated)_`. If the run deadline has passed at the top of a month, post ONE `⚠️ Food Sync — ran out of time` alert for the remaining months and stop (`any_failure`).
 11. Save state only if `not any_failure` (else exit 1). **Each provider's** watermark = `max(processed_ts)` (its recorded receipts + parse failures + foreign skips), never past that provider's earliest **fetch** failure.
+12. **Reconcile (`reconcile_tabs`, runs before the state save and also on a quiet "No new receipts" run).** Compares the current month's tab against `tab_snapshot`; each missing message id is re-fetched with `gmail get` (no search), re-parsed, and re-inserted in date order (`insert_rows_at`, bottom-up, never above row 3 so the G1/G2 MTD summary stays put) — or appended when it is newer than every row. Posts `♻️ Food Receipts Restored`. It deliberately does not touch the watermark, never raises (a failure only means the next run retries), and skips ids in `reconcile_blocked_ids` after `RECONCILE_MAX_RESTORES` restores so a row the user keeps deleting isn't re-added forever. `_receipt_msg_id()` keeps `manual` markers out of the snapshot — only real hex message ids can be re-fetched.
 
 ## Weekly flow (`foodpanda_weekly_report.py`)
 
@@ -119,6 +121,7 @@ Grab (`date_mode="pickup"`):
 - **`_parse_pickup_date` validates via `datetime(...)`** (returns None on an impossible date) and the Grab `date_re` ends with `(?!\d)` so a 4-digit year can't silently truncate to the wrong year — both degrade to a clean parse-failure instead of a wrong tab / a crash.
 - **Top-level crash handler** — `main()` wrapped in try/except that posts a `friendly_error()` summary via `quick_alert()` (full traceback → stdout) before re-raising. Keep it on every script.
 - **`retry()`** — 3× backoff on lowercased `429`/`503`/`ratelimit`/`timeout`/`transient`/`timed out`. Keep patterns lowercase and `str(e).lower()`. `get_all_sheets()` and all direct `.execute()` calls stay wrapped in `retry()`. The `_run_deadline` gate (above) bounds it.
+- **Reconcile is a safety net, not a second sync.** It only re-adds ids it remembers from a previous run's tab (`tab_snapshot`), never searches Gmail, and must stay non-fatal: wrap call sites in try/except and let it return 0 on any read/list failure. Costs one tab read (+ the gid lookup once per process) per run. Don't let it write above row 3 — an `insertDimension` at row 2 shifts the G1/G2 MTD summary. Its inserts must run bottom-up so the `read_rows` row numbers stay valid.
 - **Weekly reads two tabs on boundary weeks** and treats a missing tab as benign — don't simplify to a single month read. It reports the PREVIOUS complete Sun–Sat week regardless of run day — never change it back to "the current week" (that's what dropped every Sunday's orders).
 
 ## Testing

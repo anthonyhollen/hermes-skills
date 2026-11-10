@@ -43,6 +43,14 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 MAX_MERCHANT_LEN = 200    # a longer capture means the merchant regex overran its end label
 
+# ── Reconciliation safety net (reconcile_tabs below) ───────────────────────────
+# A manual edit/paste that REPLACES a month tab's contents silently drops rows the sync already
+# wrote: the Gmail watermark has moved past those receipts, so the normal flow never looks at
+# them again. Each run remembers which receipt ids the tab held; an id that disappears is
+# re-fetched by message id and re-appended.
+RECONCILE_MAX_RESTORES = 3    # the same receipt deleted this many times → leave it out
+RECONCILE_EMBED_MAX    = 15   # restore entries listed in one Discord embed
+
 # ── Provider config ──────────────────────────────────────────────────────────
 # Each provider drives one Gmail search + one set of parse regexes. Add a provider
 # by appending a dict here; the rest of the flow (dedup, sheet, Discord) is generic.
@@ -525,6 +533,235 @@ def get_mtd_total(sheet_name):
     except Exception:
         return None
 
+def sgt_now():
+    """Current time in SGT. A function so tests can pin it (same pattern as the weekly report)."""
+    return datetime.now(SGT)
+
+def _receipt_msg_id(value):
+    """True when a tab's Email ID cell is a real Gmail message id (hex), not a manual marker
+    such as 'manual' / 'manual (wife account)' — only real ids can be re-fetched from Gmail."""
+    return bool(re.fullmatch(r"[0-9a-fA-F]{10,}", (value or "").strip()))
+
+def previous_month_name(month_name):
+    """'Nov 2026' → 'Oct 2026' (locale-independent, via MONTHS)."""
+    mon, year = month_name.split()
+    idx = MONTHS.index(mon) - 1
+    if idx < 0:
+        idx, year = 11, str(int(year) - 1)
+    return f"{MONTHS[idx]} {year}"
+
+_sheet_gid_cache = {}
+
+def _sheet_gid(sheet_name):
+    """The numeric sheetId (gid) a tab needs for insertDimension. Cached per process."""
+    if sheet_name in _sheet_gid_cache:
+        return _sheet_gid_cache[sheet_name]
+    service = get_sheets_service()
+    meta = retry(lambda: service.spreadsheets().get(
+        spreadsheetId=SHEET_ID, fields="sheets.properties").execute())
+    for s in meta.get("sheets", []):
+        p = s["properties"]
+        _sheet_gid_cache[p["title"]] = p["sheetId"]
+    return _sheet_gid_cache.get(sheet_name)
+
+def insert_rows_at(sheet_name, before_row, rows):
+    """Insert `rows` (A:F) immediately above the real 1-based `before_row`, shifting the rows
+    below down — used by reconcile so a restored receipt lands in date order instead of at the
+    bottom of the tab. Callers insert from the BOTTOM UP so earlier row numbers stay valid."""
+    gid = _sheet_gid(sheet_name)
+    if gid is None:
+        raise RuntimeError(f"sheet tab '{sheet_name}' not found")
+    service = get_sheets_service()
+    retry(lambda: service.spreadsheets().batchUpdate(spreadsheetId=SHEET_ID, body={"requests": [{
+        "insertDimension": {
+            "range": {"sheetId": gid, "dimension": "ROWS",
+                      "startIndex": before_row - 1, "endIndex": before_row - 1 + len(rows)},
+            "inheritFromBefore": True,
+        }}]}).execute())
+    retry(lambda: service.spreadsheets().values().update(
+        spreadsheetId=SHEET_ID,
+        range=f"'{sheet_name}'!A{before_row}:F{before_row + len(rows) - 1}",
+        valueInputOption="USER_ENTERED",
+        body={"values": rows}).execute())
+
+def _restore_rows_in_order(month_name, rows, restored):
+    """Write restored entries back into the tab in date order: an entry whose date precedes an
+    existing row is INSERTED above that row; entries newer than everything are appended.
+    `rows` is the tab as read before the restore — inserting bottom-up keeps its row numbers
+    valid, and the insert never starts above row 3 (row 1-2 hold the header + MTD summary)."""
+    def is_iso(value):
+        return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value or ""))
+
+    placed, tail = [], []
+    for r in restored:
+        before = next((row[0] for row in rows if is_iso(row[1]) and row[1] > r[0]), None)
+        if before:
+            placed.append((max(before, 3), r))   # keep the G1/G2 MTD summary in place
+        else:
+            tail.append(r)
+    # Bottom-up, latest-dated first on a tie, so equal dates still come out ascending.
+    for before, r in sorted(placed, key=lambda x: (x[0], x[1][0]), reverse=True):
+        insert_rows_at(month_name, before, [[r[0], r[1], r[2], r[4], r[3], r[5]]])
+    if tail:
+        append_rows(month_name, [[r[0], r[1], r[2], r[4], r[3], r[5]] for r in tail])
+
+def reconcile_month(month_name, state):
+    """Re-add receipt rows that the tab held at the end of an earlier run but that have since
+    vanished (a manual edit/paste that replaced the tab's contents). Rows are re-fetched by
+    their Gmail message id — no Gmail search is needed. Returns the restored entries.
+
+    Never raises: this is a safety net around the main flow, so a failure here only means the
+    next run retries (it must not abort the sync or duplicate what the main flow wrote)."""
+    if _past_deadline():
+        print(f"  Reconcile: skipped '{month_name}' (past the run deadline)")
+        return []
+
+    try:
+        rows = read_rows(month_name)
+    except Exception as e:
+        print(f"  Reconcile: could not read '{month_name}' ({e}) — skipped")
+        return []
+
+    snapshots = state.setdefault("tab_snapshot", {})
+    snap = snapshots.get(month_name)
+    if snap is None:                    # first run for this month — seed, nothing to compare yet
+        snapshots[month_name] = [[r[4], r[6] or "FoodPanda"] for r in rows if _receipt_msg_id(r[4])]
+        save_state(state)
+        return []
+
+    present = set(r[4] for r in rows if r[4])
+    vanished = [(mid, pname) for mid, pname in snap if mid not in present]
+    if not vanished:                    # nothing lost — just keep the snapshot in step
+        fresh = [[r[4], r[6] or "FoodPanda"] for r in rows if _receipt_msg_id(r[4])]
+        if fresh != snap:
+            snapshots[month_name] = fresh
+            save_state(state)
+        return []
+
+    blocked = set(state.get("reconcile_blocked_ids", []))
+    counts = state.setdefault("restored_counts", {})
+    existing_orders = {(r[6], r[5]) for r in rows if r[5]}
+    candidates, failed, newly_blocked = [], [], []
+
+    for mid, pname in vanished:
+        if mid in blocked:
+            continue
+        provider = next((p for p in PROVIDERS if p["name"] == pname), None)
+        if provider is None:            # a provider that has since been removed from config
+            continue
+        if counts.get(mid, 0) >= RECONCILE_MAX_RESTORES:
+            blocked.add(mid)            # deleted again and again — stop fighting the user
+            newly_blocked.append(mid)
+            continue
+        try:
+            full = run_gapi(["gmail", "get", mid])
+        except Exception as e:
+            print(f"  Reconcile: could not fetch email {mid}: {e}")
+            failed.append(mid)
+            continue
+        status, payload = extract_expenses(full.get("body", ""), provider)
+        if status != "ok":
+            print(f"  Reconcile: email {mid} no longer parses ({status}) — left out")
+            failed.append(mid)
+            continue
+        order_date, merchant, total, order_id = payload
+        if sheet_month_name(order_date) != month_name:
+            continue                    # e.g. a refund email dated in another month
+        if order_id and (pname, order_id) in existing_orders:
+            continue                    # the row survived under a different email id
+        try:
+            email_ts = parse_email_date(full.get("date", "")).isoformat()
+        except Exception:
+            email_ts = ""
+        candidates.append((order_date, merchant, total, order_id, mid, pname, email_ts))
+
+    restored = []
+    if candidates:
+        # A wiped tab can lose BOTH receipts of a refunded order — keep only the latest one.
+        latest, no_order = {}, []
+        for r in candidates:
+            key = (r[5], r[3])
+            if not r[3]:
+                no_order.append(r)
+            elif key not in latest or r[6] > latest[key][6]:
+                latest[key] = r
+        restored = sorted(list(latest.values()) + no_order, key=lambda r: (r[0], r[4]))
+        try:
+            _restore_rows_in_order(month_name, rows, restored)
+        except Exception as e:
+            discord_alert(f"⚠️ Food Sync — restore failed for {month_name}",
+                          f"{len(restored)} receipt row(s) had vanished from the tab and "
+                          f"re-adding them failed: {e}\nThe next run retries them.")
+            return []
+        for r in restored:
+            counts[r[4]] = counts.get(r[4], 0) + 1
+        print(f"  Reconcile: restored {len(restored)} missing row(s) in '{month_name}'")
+
+        mtd = get_mtd_total(month_name)
+        mtd_display = f"S${mtd:.2f}" if mtd is not None else "N/A"
+        lines = [f"• `{r[0]}` · *{san(r[1])}* ({r[5]}) · **S${r[2]:.2f}**"
+                 for r in restored[:RECONCILE_EMBED_MAX]]
+        if len(restored) > RECONCILE_EMBED_MAX:
+            lines.append(f"…and {len(restored) - RECONCILE_EMBED_MAX} more")
+        try:
+            discord_embed(
+                DISCORD_CHANNEL_ID,
+                f"♻️ Food Receipts Restored — {month_name}",
+                "These receipts were still in Gmail but had vanished from the sheet (a manual "
+                "edit replaced the tab's contents). They've been re-added:\n"
+                + "\n".join(lines) + f"\n\n*Sheet updated — MTD total: {mtd_display}*")
+        except Exception as e:
+            print(f"Discord notification failed: {e}")
+
+    if newly_blocked:
+        discord_alert("⚠️ Food Sync — receipts keep disappearing",
+                      f"{len(newly_blocked)} receipt(s) were restored {RECONCILE_MAX_RESTORES} "
+                      f"times and deleted again — leaving them out from now on: {newly_blocked}")
+    if failed:
+        print(f"  Reconcile: {len(failed)} vanished row(s) could not be restored: {failed}")
+
+    state["reconcile_blocked_ids"] = sorted(blocked)
+    try:
+        rows = read_rows(month_name)    # re-read so the snapshot includes the restored rows
+    except Exception:
+        pass
+    snapshots[month_name] = [[r[4], r[6] or "FoodPanda"] for r in rows if _receipt_msg_id(r[4])]
+    save_state(state)
+    return restored
+
+def reconcile_tabs(state):
+    """Run the reconciliation safety net for the current month — plus the previous month while
+    its snapshot still exists (the payment reminder reads that tab on the 1st). Returns the
+    number of rows restored. Any error is logged, never raised."""
+    now = sgt_now()
+    current = f"{MONTHS[now.month - 1]} {now.year}"
+    months = [current, previous_month_name(current)]
+    months = [m for m in months if m == current or m in state.get("tab_snapshot", {})]
+    try:
+        existing_tabs = set(get_all_sheets())
+    except Exception as e:
+        print(f"  Reconcile: could not list tabs ({e}) — skipped")
+        return 0
+    months = [m for m in months if m in existing_tabs]
+
+    restored = 0
+    for month_name in months:
+        try:
+            restored += len(reconcile_month(month_name, state))
+        except Exception as e:
+            print(f"  Warning: reconciliation failed for '{month_name}': {e}")
+
+    # Keep only the two tracked months so the state file doesn't grow a key every month.
+    snapshots = state.get("tab_snapshot", {})
+    for name in list(snapshots):
+        if name not in months:
+            del snapshots[name]
+    live_ids = {mid for name in months for mid, _p in snapshots.get(name, [])}
+    counts = state.get("restored_counts", {})
+    if counts:
+        state["restored_counts"] = {k: v for k, v in counts.items() if k in live_ids}
+    return restored
+
 def _past_deadline():
     return _run_deadline is not None and time.monotonic() >= _run_deadline
 
@@ -778,6 +1015,12 @@ def main():
 
     if not new_entries and not parse_failures and not foreign_skips and not nonfood_skips:
         print("No new receipts to process.")
+        # Quiet days are exactly when a manual edit could wipe rows unnoticed — run the net.
+        if not fetch_failures:
+            try:
+                reconcile_tabs(state)
+            except Exception as e:
+                print(f"  Warning: reconciliation failed: {e}")
         return 1 if fetch_failures else 0
 
     # ── Within-batch dedup by (provider, order_id) ─────────────────────────────
@@ -982,6 +1225,15 @@ def main():
                           "\n".join(lines))
         except Exception as e:
             print(f"Discord notification failed: {e}")
+
+    # Safety net: a manual edit/paste that replaces a month tab's contents silently drops rows
+    # the sync already wrote (the watermark is past those receipts, so the normal flow never
+    # looks at them again). Re-add them from Gmail before saving state.
+    if not any_failure:
+        try:
+            reconcile_tabs(state)
+        except Exception as e:
+            print(f"  Warning: reconciliation failed: {e}")
 
     # Only save state if no failures occurred
     if any_failure:
