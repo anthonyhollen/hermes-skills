@@ -103,6 +103,22 @@ sqlite3 ~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/spotify.
   "SELECT run_id, run_type, status, datetime(started_at/1000,'unixepoch','+8 hours'), detail FROM run_log ORDER BY run_id DESC LIMIT 10"
 ```
 
+### Nightly DeepSeek skip report is silent ("stopped" for a night or more)
+
+`llm_report.build_report()` returns `""` — so no Discord message is sent — whenever the current listening day (04:00→04:00 SGT) has **zero DeepSeek verdicts**: no new pick/wildcard finished or skipped, and no encore skipped. Silence is the designed output for (a) a day with no Spotify listening at all, (b) a day that played only core/favourite tracks (no `llm`/`wildcard`/`encore` source), or (c) a day whose DeepSeek plays were all stopped or passed through (not counted). Do not treat the missing message as a cron failure until the data is checked.
+
+Diagnose in this order:
+
+1. **Did the job run?** `cronjob(action='list')` → job `ebe12186f5fd`, `last_status: ok`; then read `~/.hermes/cron/output/ebe12186f5fd/<YYYY-MM-DD>_23-30-*.md`. A healthy silent night says `**Status:** silent (empty output)`; a real failure carries the traceback and a non-zero status.
+2. **Any plays at all?** `play_events.played_at` is unix **milliseconds** — `SELECT datetime(max(played_at)/1000,'unixepoch','+8 hours') FROM play_events`. Treating it as seconds makes `date()`/`datetime()` return NULL for every row. In `run_log`, poll rows with `events_stored: 0` while `events_fetched: 50` mean the same 50 recents are being re-fetched: no new plays.
+3. **What does Spotify itself say?** Call `me/player/recently-played?limit=50` with a **force-refreshed** token (`resolve_runtime_credentials(force_refresh=True)`); the cached token from `client.get_token()` can return a spurious 410 on this endpoint. Print the newest `played_at`. Then `me/player/devices`: only inactive devices (no phone) means the phone is not connected to this account — offline downloads appear only after they sync, and a different Spotify account is invisible to this token.
+4. **Is the sampler alive, and what did it see?** `sampler_state` → `heartbeat` (`last_ok` advances, `status`) and `segmenter` (`last_playing_t`). A fresh heartbeat with `status: idle` and an old `last_playing_t` means the service is healthy with no playback visible. `sampler_coverage` rows exist only for playing/paused/non-track/private samples, so an empty tail is consistent with no listening — not evidence of a crash.
+5. **Is the rest of the pipeline healthy?** A new `playlist_version` row each 03:00 and an `llm_batch` row with `status: ok` each 01:20 prove refresh and discovery are fine; the report may legitimately be the only silent piece.
+
+If plays do exist in the window and the report is still silent, the bug is in `skip_signals.day_outcomes` / `version_tallies` (sources must be `llm`/`wildcard`/`encore`; only `done`/`skip`/`skim` verdicts count), not in the cron job.
+
+Run the DB queries with Python's `sqlite3` through `execute_code`: the Pi has no `sqlite3` CLI, and a shell heredoc that names the ~11 MB DB can be refused by the gateway's script-scan guard (files over 1 MiB are unscannable).
+
 ### Skip detection (v2.18) — sampler / digest
 
 - **Is the sampler running?** Run

@@ -122,7 +122,12 @@ Skill root: `scripts/test_track_name_filters.py` (filter suite),
   - Detail: `references/llm-discovery.md`.
 - **DeepSeek skip report (23:30)** — the share of new DeepSeek songs skipped
   (today, per day, since 6 Oct) against the artist-graph benchmark (1–6 Oct:
-  74% skipped / 26% finished), plus last night's token use.
+  74% skipped / 26% finished), plus last night's token use. It prints
+  **nothing** when the listening day has zero DeepSeek verdicts — no
+  listening, only favourites played, or all DeepSeek plays stopped/passed —
+  so a missing night is normal, not a failed job. Before touching cron, check
+  the last play and the sampler heartbeat: "Nightly DeepSeek skip report is
+  silent" in `references/troubleshooting.md`.
 - **Skip signals** — the resident sampler (`spotify-sampler.service`) measures
   real exposure. User rule: leaving before 90% is a skip. Any skip → a
   3-refresh cooldown; 2 in 14 days → out until a full play.
@@ -231,7 +236,7 @@ API call.
 | `references/filters.md` | output filters, category + album exclusions, adding a filter, regex/patch pitfalls |
 | `references/schema.md` | SQLite tables, run_log detail shapes, config.yaml (what is / isn't read) |
 | `references/cron-wrappers.md` | cron jobs + IDs, wrapper behavior/output, token source, re-auth, scopes |
-| `references/troubleshooting.md` | a run misbehaves: underfill, null playlist reads, unplayable tracks, 5xx, events_stored, run_log errors, backups |
+| `references/troubleshooting.md` | a run misbehaves: underfill, null playlist reads, unplayable tracks, 5xx, events_stored, run_log errors, a silent skip report, backups |
 | `references/feb-2026-api-audit.md` | before touching any Spotify API call |
 | `references/wildcard-rate-limit.md` | wildcard fill / album-endpoint rate limits |
 | `references/impl-notes.md` | May 2026 composer fixes, verification commands |
