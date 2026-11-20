@@ -66,6 +66,40 @@ playlist = composer.compose_playlist(scores, dry_run=True)
 for t in playlist: print(t['source'], t['name'])
 ```
 
+### Full refresh on a DB copy (no live write)
+
+`dry_run=True` covers compose only. To exercise `refresher.refresh_playlist()`
+end to end — poll, anchor, score, compose, PUT — without changing the live
+playlist:
+
+```python
+import sqlite3, sys
+sys.path.insert(0, '.')
+import db
+SRC, DST = '../spotify.db', '/tmp/spotify-refresh-test.db'
+s = sqlite3.connect(SRC); d = sqlite3.connect(DST)
+s.backup(d); d.close(); s.close()          # WAL-safe copy
+db.DB_PATH = DST; db.init_db()
+import refresher, client, poller
+client.get_token = lambda: 'fake-token'
+poller.poll_listening_events = lambda *a, **k: 0
+refresher._get_snapshot_id = lambda token: 'snap-before'
+wrote = []
+def fake_replace(token, uris):
+    wrote.append(uris); return 'snap-after'
+refresher._replace_tracks = fake_replace
+print(refresher.refresh_playlist(), len(wrote[0]))
+```
+
+- **Copy with `sqlite3.backup()`, never `cp`** — WAL keeps the newest commits in
+  `spotify.db-wal`; a plain file copy can be stale.
+- Patch **both** `_replace_tracks` and `_get_snapshot_id`; a real PUT replaces
+  the live playlist even from a test process.
+- Verify `run_log.detail` (`tracks_added`, `inactive`, `taste_anchor_ms`,
+  `history_fill`) and the `playlist_version_track` sources. `artists` is empty
+  for `core` / `fallback` rows (`_fetch_track_metadata` has only `track_cache`'s
+  artist IDs) — check artists against the live playlist response instead.
+
 ```bash
 # Clear stale artist_cache entries
 sqlite3 ~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/spotify.db \

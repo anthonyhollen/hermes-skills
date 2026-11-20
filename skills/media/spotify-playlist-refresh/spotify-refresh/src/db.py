@@ -369,6 +369,15 @@ def get_events_since(after_ms: int) -> list[dict]:
         ).fetchall()
     return [_row_to_event(r) for r in rows]
 
+def get_last_event_ms() -> int | None:
+    """Timestamp (ms) of the most recent recorded play, or None with no history.
+    Drives the inactivity anchor (scorer.taste_anchor): a listener who hasn't
+    played anything for a whole scoring window is travelling / away, and the
+    playlist is built from the last known taste instead of an empty window."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT MAX(played_at) FROM play_events").fetchone()
+    return row[0] if row and row[0] else None
+
 def get_recent_events(limit: int = 50) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
@@ -600,6 +609,25 @@ def get_snapshot_trend(track_id: str, limit: int = 90) -> list[dict]:
             (track_id, limit)
         ).fetchall()
     return [{"computed_at": r[0], "affinity": r[1]} for r in rows]
+
+
+def get_historical_likes(since_ms: int, min_affinity: float = 1.0) -> list[dict]:
+    """Tracks that were liked (affinity >= min_affinity) in ANY snapshot since
+    since_ms, most recently liked first, then by best affinity.
+
+    affinity_snapshot keeps every refresh's non-zero scores for 90 days, so this
+    is the "last known liked" pool used by composer's fallback when the current
+    window cannot fill the playlist (listening gap / a thin week). Observability
+    data is read-only here."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT track_id, MAX(affinity) AS best, MAX(computed_at) AS last_liked
+               FROM affinity_snapshot
+               WHERE affinity >= ? AND computed_at >= ?
+               GROUP BY track_id
+               ORDER BY last_liked DESC, best DESC""",
+            (min_affinity, since_ms)).fetchall()
+    return [{"track_id": r[0], "best_affinity": r[1], "last_liked_ms": r[2]} for r in rows]
 
 
 def get_latest_snapshot(limit: int = 50) -> list[dict]:

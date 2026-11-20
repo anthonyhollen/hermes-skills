@@ -130,6 +130,28 @@ def compute_affinity(window_days: int = WINDOW_DAYS, now_ms: int | None = None,
     return scores, now_ms
 
 
+def taste_anchor(now_ms: int | None = None, window_days: int | None = None) -> tuple[int, bool]:
+    """Return (effective_now_ms, inactive).
+
+    A listener who has not played anything for a whole scoring window is away
+    (vacation, travel, a break). Scoring at the real clock then yields an empty
+    window — no favourites, no taste. In that case anchor the scoring clock at
+    the last recorded play, so the listener's last active window is scored and
+    the playlist is built from the last known taste. Active listeners are
+    unchanged (real now, inactive=False).
+
+    Returns the real now when there is no play history at all (nothing to
+    anchor on) — inactive is False then.
+    """
+    if now_ms is None:
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    window_days = WINDOW_DAYS if window_days is None else window_days
+    last = db.get_last_event_ms()
+    if last is None or last > now_ms - window_days * 86400 * 1000:
+        return now_ms, False
+    return last, True
+
+
 def update_blocklist(affinity_scores: dict[str, float], use_signals: bool | None = None):
     """
     Apply blocklist rules: tracks with affinity ≤ DISLIKE_THRESHOLD are permanently banned.

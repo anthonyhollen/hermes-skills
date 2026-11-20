@@ -1,7 +1,7 @@
 ---
 name: spotify-playlist-refresh
 description: "Spotify playlist refresh: affinity-based scoring → 40-track daily playlist (24 favourites + 16 DeepSeek-picked new songs), with sampler-based skip detection (cooldown/demotion). Spec-compliant implementation in ~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/"
-version: 2.24.0
+version: 2.25.0
 platforms: [linux]
 prerequisites:
   python: "3.11+"
@@ -73,7 +73,7 @@ that block in any new wrapper (see CHANGELOG 2.23.1).
     ├── poller.py      # poll_listening_events() entrypoint (+ context_uri, signal rebuild)
     ├── scorer.py      # affinity scoring + blocklist (+ skip signals when enabled)
     ├── exclusions.py  # category exclusions (pre-scoring) + output-only album exclusions
-    ├── composer.py    # core + llm + wildcard (or v2.18 discovery) composition via _Picker (counts from config)
+    ├── composer.py    # core + llm + wildcard (or v2.18 discovery) composition via _Picker (counts from config); away mode (v2.25)
     ├── llm_discovery.py # v2.19 DeepSeek job: profile → picks → Spotify-verified candidates (llm_batch/llm_pick)
     ├── llm_report.py  # v2.21 nightly DeepSeek skip report vs the artist-graph benchmark (DB only)
     ├── refresher.py   # refresh_playlist() orchestration + stage budgets (+ playlist_version)
@@ -83,7 +83,8 @@ that block in any new wrapper (see CHANGELOG 2.23.1).
 ```
 Skill root: `scripts/test_track_name_filters.py` (filter suite),
 `scripts/test_skip_signals.py` (+ `scripts/fixtures/`, skip-detection suite),
-`references/`. Wrappers live in `~/.hermes/scripts/` (not the skill dir).
+`scripts/test_taste_anchor.py` (away mode / last-known taste), `references/`.
+Wrappers live in `~/.hermes/scripts/` (not the skill dir).
 
 ## How it works (summary — detail in references)
 
@@ -101,6 +102,12 @@ Skill root: `scripts/test_track_name_filters.py` (filter suite),
   - every guardrail applied while picking (`_Picker`).
   Short → favourites fill the gap and the banner says `⚠️ n/40`.
   `llm_discovery.enabled: false` = the v2.18 artist graph.
+- **Away mode (v2.25, user 2026-11-21)** — no play in the 7-day window
+  (vacation / travel): score the last active 7 days (`scorer.taste_anchor`) and
+  fill all 40 slots from the last known favourites, **no new music**; the
+  90-day `affinity_snapshot` likes top up a thin window. Banner: "No listening
+  since <date>". One play in the window restores the normal 24 + 16 mix. The
+  DeepSeek profile anchors the same way after 14 silent days.
 - **DeepSeek discovery (01:20, retry 02:20)** — one `deepseek-flash` thinking
   call on a taste profile; every pick is verified with Spotify search (exact
   title + artist, playable, artist never heard **by ID**, **no J-pop**).
@@ -111,8 +118,8 @@ Skill root: `scripts/test_track_name_filters.py` (filter suite),
   - **Spend guard:** every DeepSeek call through the skill, from any process,
     shares one budget per day (`budget_tokens_day` 120k, about $0.15). The day
     opens at 01:00 SGT so each night gets the whole allowance. Over it, calls
-    are refused. **Ask the user before any test / probe calls**:
-    on 10-12, 23 probe calls cost 77¢, many times the normal daily spend.
+    are refused. **Ask the user before any probe call** (23 probes cost 77¢ on
+    10-12, many times the normal daily spend).
   - **Taste rules (user 2026-10-15):** upbeat (`min_bpm` 95) and female-led
     (`vocal_filter`) only, because slow songs while driving are dangerous. The
     model labels act / BPM; breaking picks are dropped before any search.
@@ -120,14 +127,10 @@ Skill root: `scripts/test_track_name_filters.py` (filter suite),
   - **Learning loop:** encores, WORKED / DIDNT_WORK feedback, adaptive mix /
     angle.
   - Detail: `references/llm-discovery.md`.
-- **DeepSeek skip report (23:30)** — the share of new DeepSeek songs skipped
-  (today, per day, since 6 Oct) against the artist-graph benchmark (1–6 Oct:
-  74% skipped / 26% finished), plus last night's token use. It prints
-  **nothing** when the listening day has zero DeepSeek verdicts — no
-  listening, only favourites played, or all DeepSeek plays stopped/passed —
-  so a missing night is normal, not a failed job. Before touching cron, check
-  the last play and the sampler heartbeat: "Nightly DeepSeek skip report is
-  silent" in `references/troubleshooting.md`.
+- **DeepSeek skip report (23:30)** — skipped share of new DeepSeek songs vs the
+  artist-graph benchmark (1–6 Oct: 74% skipped), plus last night's tokens. It
+  prints **nothing** on a day with zero DeepSeek verdicts — normal, not a
+  failure. Silent-report checks: `references/troubleshooting.md`.
 - **Skip signals** — the resident sampler (`spotify-sampler.service`) measures
   real exposure. User rule: leaving before 90% is a skip. Any skip → a
   3-refresh cooldown; 2 in 14 days → out until a full play.
@@ -160,20 +163,15 @@ Not cron: **`spotify-sampler.service`** (systemd user unit, launcher
 XDG_RUNTIME_DIR=/run/user/$(id -u)` before `systemctl --user status|restart
 spotify-sampler` over SSH; restart it after changing `src/`.
 
-**Always use the wrapper scripts** — the `script` field is a filename; inline
-code causes "Script not found". Wrappers force-refresh the token via
-`resolve_spotify_runtime_credentials(force_refresh=True)`, write it to
-`auth.json` atomically, then run the entrypoint. In the current install
-`hermes_cli.auth` no longer exports that name, so the wrappers fall back to the
-`spotify` plugin's `spotify_auth.resolve_runtime_credentials` (plugin dir
-inserted on `sys.path`). That fallback is the refresh job's **only** plugin
-dependency: playlist-tool changes in a plugin update cannot affect it, but
-confirm `spotify_auth.resolve_runtime_credentials` still exists with the same
-signature before applying one (`hermes plugins check-updates` is read-only;
-review recipe: the `plugin-update-review` reference in the `hermes-agent` skill). Never use `auth._do_refresh()`
-for PKCE tokens (`400 invalid_client`). Update a job:
+**Always use the wrapper scripts** — `script` takes a filename (inline code =
+"Script not found"). They force-refresh the token, write `auth.json` atomically,
+then run the entrypoint. `hermes_cli.auth` no longer exports
+`resolve_spotify_runtime_credentials`, so the wrappers fall back to the
+`spotify` plugin's `spotify_auth.resolve_runtime_credentials` (the refresh
+job's **only** plugin dependency — confirm it still exists before a plugin
+update; never use `auth._do_refresh()` for PKCE tokens). Update a job:
 `cronjob(action="update", job_id="<id>", script="spotify_refresh_wrapper.py")`.
-Job IDs, schedule history, output contract: `references/cron-wrappers.md`.
+Job IDs / output contract: `references/cron-wrappers.md`.
 
 ## Token
 
@@ -212,21 +210,19 @@ API call.
   `references/troubleshooting.md` (sqlite one-liners).
 - **Check recent runs** — `SELECT * FROM run_log ORDER BY run_id DESC LIMIT 10`
   (query in `references/troubleshooting.md`).
-- **Answer "what did I skip this morning?"** — rebuild signals first (skip_signal
-  is only refreshed on poll / the 23:30 report / refresh): from `src/`,
+- **Answer "what did I skip this morning?"** — rebuild signals first (refreshed
+  only on poll / the 23:30 report / refresh): from `src/`,
   `python3 -c "import db, skip_signals as ss; db.init_db(); print(ss.rebuild_signals())"`,
-  then read `skip_signal` rows for the window; names/artists come from
-  `play_segment` data. Use the venv Python — no `sqlite3` CLI on the Pi. A
-  session not yet polled shows `0 matched` plays — expected, not a bug.
+  then read `skip_signal` for the window (names from `play_segment`). Venv
+  Python only — no `sqlite3` CLI on the Pi.
 - **DeepSeek picks** — from `src/`: `python3 llm_discovery.py show` (latest
   batch, every row + why it was dropped), `stats --days 7` (finished share per
   playlist source vs the 26% discovery baseline), `python3 llm_report.py`
   (tonight's skip report, DB only), `run --dry-run` (writes nothing — night
   only), `run --force` (a batch now). Style / angles / blocked names:
   `config.yaml` → `llm_discovery`. Rollback: `llm_discovery.enabled: false`.
-- **Skip-check digest** — **paused 2026-10-12** (job `bdbb183faf82`; the user
-  trusts the skip logic). Resume only if asked: `hermes cron resume bdbb183faf82`.
-  Labels / accuracy: `references/skip-signals.md`.
+- **Skip-check digest** — **paused 2026-10-12** (job `bdbb183faf82`; skip logic
+  trusted). Resume only if asked: `hermes cron resume bdbb183faf82`.
 
 ## References
 
@@ -239,7 +235,7 @@ API call.
 | `references/troubleshooting.md` | a run misbehaves: underfill, null playlist reads, unplayable tracks, 5xx, events_stored, run_log errors, a silent skip report, backups |
 | `references/feb-2026-api-audit.md` | before touching any Spotify API call |
 | `references/wildcard-rate-limit.md` | wildcard fill / album-endpoint rate limits |
-| `references/impl-notes.md` | May 2026 composer fixes, verification commands |
+| `references/impl-notes.md` | composer fixes, verification commands (incl. full-refresh copy test) |
 | `references/llm-discovery.md` | v2.19 DeepSeek discovery: probe evidence, flow, new-artist / no-J-pop / matching rules, run safety, ops, rollback, cost |
 | `references/skip-signals.md` | v2.18 skip detection: sampler, fallback tiers, cooldown/demote/bans, digest + labels, acceptance gates, service ops |
 | `references/skip-detection-limitation.md` | why recently-played misses skips (history); manual blocklist |

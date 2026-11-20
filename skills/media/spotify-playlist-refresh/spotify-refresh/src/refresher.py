@@ -82,11 +82,15 @@ def _refresh_playlist():
             skip_signals.rebuild_signals()
         except Exception as e:
             print(f"⚠️  skip-signal rebuild failed, using the last one: {e}", file=sys.stderr)
-        scores, computed_at_ms = scorer.compute_affinity()
+        # Away mode (v2.25): no play in the whole scoring window → anchor the
+        # scoring clock at the last listening day, so the last known taste is
+        # scored instead of an empty window. Active listeners are unchanged.
+        anchor_ms, inactive = scorer.taste_anchor()
+        scores, computed_at_ms = scorer.compute_affinity(now_ms=anchor_ms)
         newly_blocked = scorer.update_blocklist(scores)
 
         # ── 3. Compose ───────────────────────────────────────────────────────
-        tracks = composer.compose_playlist(scores, dry_run=False)
+        tracks = composer.compose_playlist(scores, dry_run=False, inactive=inactive)
         llm_info = dict(getattr(composer, "LAST_INFO", None) or {})   # v2.19 DeepSeek slots (empty when off)
     except Exception as e:
         _log_error("refresh", started_at, f"failed before playlist write: {type(e).__name__}: {e}")
@@ -121,6 +125,8 @@ def _refresh_playlist():
         "tracks_added": len(uris),
         "scores_computed": len(scores),
         "newly_blocked": newly_blocked,
+        "inactive": inactive,
+        "taste_anchor_ms": anchor_ms if inactive else None,
     }
     if llm_info:
         detail["llm"] = llm_info
@@ -160,7 +166,9 @@ def _refresh_playlist():
               f"(playlist already updated): {e}", file=sys.stderr)
 
     return {"status": "ok", "tracks": len(uris), "target": composer.TARGET_SIZE,
-            "scores": len(scores), "llm_note": llm_info.get("note")}
+            "scores": len(scores), "llm_note": llm_info.get("note"),
+            "inactive": inactive, "taste_anchor_ms": anchor_ms if inactive else None,
+            "history_fill": llm_info.get("history_fill", 0)}
 
 
 # ── internal ─────────────────────────────────────────────────────────────────

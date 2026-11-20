@@ -15,6 +15,7 @@ import db, client, scorer, exclusions, skip_signals
 # (defaults below are the current production values; edit config.yaml to tune)
 _cfg = {}
 _llm_cfg = {}
+_full: dict = {}
 _cfg_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
 if os.path.exists(_cfg_path):
     import yaml
@@ -22,6 +23,11 @@ if os.path.exists(_cfg_path):
         _full = yaml.safe_load(_f) or {}
     _cfg = _full.get("playlist", {}) or {}
     _llm_cfg = _full.get("llm_discovery", {}) or {}
+
+# "Last known liked" pool for the underfill fallback: affinity_snapshot keeps
+# every refresh's scores for scoring.snapshot.retention_days (90).
+HISTORY_LIKE_DAYS = int((((_full.get("scoring") or {}).get("snapshot") or {})
+                         .get("retention_days", 90)))
 
 _comp = _cfg.get("composition", {}) or {}
 _cons = _cfg.get("constraints", {}) or {}
@@ -433,17 +439,19 @@ def _llm_note(n_llm: int, n_wild: int, status: dict) -> str | None:
             f"({reason}); topped up with favourites")
 
 
-def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False) -> list[dict]:
+def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False,
+                     inactive: bool = False) -> list[dict]:
     """
     Main entry point. Takes affinity scores dict {track_id: score}, returns up to
     TARGET_SIZE track dicts (track_id, name, artist_ids, uri, source, ...).
     dry_run=True makes the same read-only API calls but writes nothing to the DB
     (no artist_cache upserts); the playlist is never touched here either way.
+    inactive=True (no play in the scoring window — the listener is away) fills
+    every slot from the last known favourites: no discovery, no new music.
     """
     liked    = scorer.get_liked_tracks(affinity_scores)
     neutral  = scorer.get_neutral_tracks(affinity_scores)
     blocked  = set(db.get_blocklist())
-    token    = client.get_token()
 
     # Skip signals (config.yaml → skip_signals.enabled; off = pre-v2.18 behaviour):
     # cooldown + demotion keep recently skipped tracks out; every observed
@@ -454,70 +462,94 @@ def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False) -
     skipped = skip_signals.skipped_ids() if use_signals else None
     picker   = _Picker(blocked, cooldown)
 
-    heard_ids = _get_heard_track_ids()
-    if use_signals:
-        heard_ids |= skip_signals.heard_ids()
-    heard_sigs = {s for s in (_track_sig(c) for c in db.get_cached_tracks(list(heard_ids)).values())
-                  if s is not None}
-    artist_affinity = _aggregate_artist_affinity(liked)
-    top_artists = sorted(artist_affinity.items(), key=lambda x: x[1], reverse=True)[:TOP_ARTISTS_N]
-    artist_data: dict[str, dict] = {}   # per-run memo shared by discovery + wildcards
-
     # v2.19: DeepSeek picks + similar artists' new releases replace the artist
     # graph (stored by the llm_discovery job — no API calls here). Disabled → the
     # llm slots go to artist-graph discovery, exactly as in v2.18.
     global LAST_INFO
     LAST_INFO = {}
+    history_filled = 0
+    hist_ids: list[str] = []
     use_llm = LLM_ENABLED and LLM_COUNT > 0
-    disc_n = DISCOVERY_COUNT + (0 if use_llm else LLM_COUNT)
 
-    # ── 1. Core favorites (CORE_COUNT) — weighted by affinity ───────────────
-    core = picker.fill(_pick_core_favorites(liked), CORE_COUNT, source="core")
-
-    # ── 2. Candidate pools (filtered at ingestion) ──────────────────────────
-    disc_cands = _pick_discoveries(top_artists, disc_n, blocked, token,
-                                   heard_ids, heard_sigs, artist_data, dry_run) if liked and disc_n > 0 else []
-    llm_cands, enc_cands, enc_slots, mf_slots, llm_status = [], [], 0, 0, {}
-    if use_llm:
-        sup = _llm_candidates(heard_ids, heard_sigs, skipped, {tid for tid, _ in liked})
-        llm_cands, wild_cands, enc_cands = sup["picks"], sup["releases"], sup["encores"]
-        enc_slots, mf_slots, llm_status = sup["encore_slots"], sup["more_from_slots"], sup["status"]
+    if inactive:
+        # Away mode (user 2026-11-21): nothing played in the whole scoring window,
+        # so refresher anchored the scores at the last listening day. Fill all
+        # TARGET_SIZE slots from those last-known favourites — no new music while
+        # away. The combined per-artist cap still applies; the history pool and
+        # neutral tracks top up when the last active window is thin.
+        core = picker.fill(_pick_core_favorites(liked), TARGET_SIZE, source="core")
+        disc_cands, wild_cands, llm_cands, enc_cands = [], [], [], []
+        wildcard, encore, llm = [], [], []
+        pool = core
     else:
-        wild_cands = _pick_wildcards(top_artists, token, heard_ids, heard_sigs,
-                                     artist_data, dry_run, skipped) if liked else []
+        token = client.get_token()
+        heard_ids = _get_heard_track_ids()
+        if use_signals:
+            heard_ids |= skip_signals.heard_ids()
+        heard_sigs = {s for s in (_track_sig(c) for c in db.get_cached_tracks(list(heard_ids)).values())
+                      if s is not None}
+        artist_affinity = _aggregate_artist_affinity(liked)
+        top_artists = sorted(artist_affinity.items(), key=lambda x: x[1], reverse=True)[:TOP_ARTISTS_N]
+        artist_data: dict[str, dict] = {}   # per-run memo shared by discovery + wildcards
+        disc_n = DISCOVERY_COUNT + (0 if use_llm else LLM_COUNT)
 
-    # ── 3. Wildcards before discovery in cap accounting (they are scarce —
-    #       appended last they always lost the combined per-artist cap) ──────
-    if use_llm:
-        new_artists: dict = {}   # one song per new artist across wildcard + llm
-        wildcard = picker.fill(wild_cands, WILDCARD_COUNT, section_cap=1, source="wildcard", counts=new_artists)
-        # Encores (finished DeepSeek songs coming back) take up to encore_slots of
-        # the llm slots; their artist may also get a new pick (a liked new artist).
-        enc_counts: dict = {}
-        encore = picker.fill(enc_cands, enc_slots, section_cap=1, source="encore", counts=enc_counts)
-        # At most more_from_max_slots go to more songs by artists already finished;
-        # the rest are artists the listener has never heard (interleaved for the layout).
-        n_slots = LLM_COUNT - len(encore)
-        llm_mf = picker.fill([c for c in llm_cands if c.get("_more_from")], min(mf_slots, n_slots),
-                             section_cap=1, source="llm", counts=new_artists)
-        llm_new = picker.fill([c for c in llm_cands if not c.get("_more_from")], n_slots - len(llm_mf),
-                              section_cap=1, source="llm", counts=new_artists)
-        llm = _spread(llm_new, llm_mf)
-        if len(encore) + len(llm) < LLM_COUNT:      # picks ran short: more encores before favourites
-            encore += picker.fill(enc_cands, LLM_COUNT - len(encore) - len(llm), section_cap=1,
-                                  source="encore", counts=enc_counts)
-    else:
-        wildcard = picker.fill(wild_cands, WILDCARD_COUNT, source="wildcard")
-        encore, llm = [], []
-    discovery = picker.fill(disc_cands, disc_n, source="discovery")
+        # ── 1. Core favorites (CORE_COUNT) — weighted by affinity ───────────
+        core = picker.fill(_pick_core_favorites(liked), CORE_COUNT, source="core")
 
-    pool = core + discovery + wildcard + encore + llm
+        # ── 2. Candidate pools (filtered at ingestion) ──────────────────────
+        disc_cands = _pick_discoveries(top_artists, disc_n, blocked, token,
+                                       heard_ids, heard_sigs, artist_data, dry_run) if liked and disc_n > 0 else []
+        llm_cands, enc_cands, enc_slots, mf_slots, llm_status = [], [], 0, 0, {}
+        if use_llm:
+            sup = _llm_candidates(heard_ids, heard_sigs, skipped, {tid for tid, _ in liked})
+            llm_cands, wild_cands, enc_cands = sup["picks"], sup["releases"], sup["encores"]
+            enc_slots, mf_slots, llm_status = sup["encore_slots"], sup["more_from_slots"], sup["status"]
+        else:
+            wild_cands = _pick_wildcards(top_artists, token, heard_ids, heard_sigs,
+                                         artist_data, dry_run, skipped) if liked else []
 
-    # ── 4. Fallback fill: liked → neutral → leftover discovery/wildcard ─────
+        # ── 3. Wildcards before discovery in cap accounting (they are scarce —
+        #       appended last they always lost the combined per-artist cap) ───
+        if use_llm:
+            new_artists: dict = {}   # one song per new artist across wildcard + llm
+            wildcard = picker.fill(wild_cands, WILDCARD_COUNT, section_cap=1, source="wildcard", counts=new_artists)
+            # Encores (finished DeepSeek songs coming back) take up to encore_slots of
+            # the llm slots; their artist may also get a new pick (a liked new artist).
+            enc_counts: dict = {}
+            encore = picker.fill(enc_cands, enc_slots, section_cap=1, source="encore", counts=enc_counts)
+            # At most more_from_max_slots go to more songs by artists already finished;
+            # the rest are artists the listener has never heard (interleaved for the layout).
+            n_slots = LLM_COUNT - len(encore)
+            llm_mf = picker.fill([c for c in llm_cands if c.get("_more_from")], min(mf_slots, n_slots),
+                                 section_cap=1, source="llm", counts=new_artists)
+            llm_new = picker.fill([c for c in llm_cands if not c.get("_more_from")], n_slots - len(llm_mf),
+                                  section_cap=1, source="llm", counts=new_artists)
+            llm = _spread(llm_new, llm_mf)
+            if len(encore) + len(llm) < LLM_COUNT:      # picks ran short: more encores before favourites
+                encore += picker.fill(enc_cands, LLM_COUNT - len(encore) - len(llm), section_cap=1,
+                                      source="encore", counts=enc_counts)
+        else:
+            wildcard = picker.fill(wild_cands, WILDCARD_COUNT, source="wildcard")
+            encore, llm = [], []
+        discovery = picker.fill(disc_cands, disc_n, source="discovery")
+
+        pool = core + discovery + wildcard + encore + llm
+
+    # ── 4. Fallback fill: liked → last known liked (90 d) → neutral →
+    #       leftover discovery/wildcard ─────────────────────────────────────
     if len(pool) < TARGET_SIZE:
         need = TARGET_SIZE - len(pool)
         liked_meta = _fetch_track_metadata([tid for tid, _ in liked if tid not in picker.ids])
         pool += picker.fill(liked_meta, need, section_cap=None, source="fallback")
+    if len(pool) < TARGET_SIZE:
+        need = TARGET_SIZE - len(pool)
+        hist = db.get_historical_likes(
+            int(datetime.now(timezone.utc).timestamp() * 1000) - HISTORY_LIKE_DAYS * 86400 * 1000,
+            scorer.LIKE_THRESHOLD)
+        hist_ids = [h["track_id"] for h in hist if h["track_id"] not in picker.ids]
+        added = picker.fill(_fetch_track_metadata(hist_ids), need, section_cap=None, source="fallback")
+        pool += added
+        history_filled = len(added)
     if len(pool) < TARGET_SIZE:
         need = TARGET_SIZE - len(pool)
         neutral_meta = _fetch_track_metadata([tid for tid, _ in neutral if tid not in picker.ids])
@@ -541,6 +573,7 @@ def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False) -
             blocked_ids.discard(tid)
             picker.cooldown = _cooldown_sets(blocked_ids)
             for cands in (_fetch_track_metadata([t for t, _ in liked if t not in picker.ids]),
+                          _fetch_track_metadata([t for t in hist_ids if t not in picker.ids]),
                           _fetch_track_metadata([t for t, _ in neutral if t not in picker.ids]),
                           disc_cands + wild_cands + llm_cands):
                 if len(pool) >= TARGET_SIZE:
@@ -552,7 +585,16 @@ def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False) -
         print(f"⚠️  Only {len(pool)} tracks composed (target: {TARGET_SIZE})", file=sys.stderr)
 
     pool = pool[:TARGET_SIZE]
-    if use_llm:
+    if inactive:
+        LAST_INFO = {"inactive": True, "favourites": len(core), "fav_pool": len(liked),
+                     "history_fill": history_filled, "layout": NEW_MUSIC_LAYOUT, "note": None}
+        favs = [t for t in pool if t.get("source") == "core"]
+        rest = [t for t in pool if t.get("source") != "core"]
+        if NEW_MUSIC_LAYOUT == "mix":
+            pool = favs[:MIX_LEAD_CORE] + _spread(favs[MIX_LEAD_CORE:], rest, lead_extra=True)
+        else:
+            pool = favs + rest
+    elif use_llm:
         LAST_INFO = {"llm": len(llm), "more_from": sum(1 for t in llm if t.get("_more_from")),
                      "encore": len(encore), "llm_target": LLM_COUNT, "wildcard": len(wildcard),
                      "wildcard_target": WILDCARD_COUNT, "llm_pool": len(llm_cands), "encore_pool": len(enc_cands),

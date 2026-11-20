@@ -148,13 +148,30 @@ only when its candidate supply is exhausted. Order of filling:
    always lost the combined per-artist cap →
 3. discovery (12) →
 4. **fallback** to 40, combined cap only: next **liked** tracks (by affinity) →
-   **neutral** tracks → **leftover discovery/wildcard candidates**. Never padded
-   with junk.
+   **last known liked** (any `affinity_snapshot` in the last 90 days, most
+   recently liked first; `db.get_historical_likes`) → **neutral** tracks →
+   **leftover discovery/wildcard candidates**. Never padded with junk.
 
 Short of 40 after all fallbacks: `⚠️ Only N tracks composed (target: 40)` goes to
 **stderr** (the refresh wrapper's stdout is the Discord message), what exists is
 PUT, and the wrapper banner appends `⚠️ N/40 tracks — not enough eligible tracks
 to fill the playlist`.
+
+### Away mode (v2.25, user 2026-11-21)
+
+With **no play in the whole scoring window**, `scorer.taste_anchor()` returns
+the last play's timestamp and `inactive=True`; refresher scores with
+`compute_affinity(now_ms=anchor)`, so the last active week is scored instead of
+an empty window (which scores 0). **Do not widen `scoring.window_days` instead:
+the 7-day half-life decays an old full listen to ~1/16 after four weeks, so a
+90-day window at that half-life adds almost nothing.** Anchor the clock or read
+the snapshots. Compose then fills all `target_size` slots from those last known favourites
+(weighted-random order, usual guardrails) and skips discovery / DeepSeek /
+wildcards entirely — **no new music while away**. The 90-day snapshot-likes
+fallback tops up a thin last-active week; the banner reports
+"No listening since <date>". Any play inside the window returns to the normal
+24 + 16 mix. `llm_discovery.taste_now()` applies the same anchor to the 14-day
+DeepSeek profile once the whole input window is silent.
 
 Removed in v2.17.0 (don't look for them): `_apply_section_guardrails`,
 `_apply_guardrails`, `_fill_from_fallback` / `_try_add`, `_weighted_sample` —

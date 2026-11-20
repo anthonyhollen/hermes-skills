@@ -188,6 +188,17 @@ def input_days(cfg: dict, days=None) -> int:
     return cap if days is None else max(1, min(int(days), cap))
 
 
+def taste_now(now_ms: int, cfg: dict) -> int:
+    """Anchor the profile windows at the last play when the whole input window is
+    silent (away / vacation). Otherwise real now. Keeps the nightly picks seeded
+    by the last known taste instead of an empty profile — the playlist itself
+    stays on favourites while the listener is away (composer away mode)."""
+    last = db.get_last_event_ms()
+    if last is not None and last <= now_ms - input_days(cfg) * DAY_MS:
+        return last
+    return now_ms
+
+
 def enabled(cfg: dict | None = None) -> bool:
     """Strict like skip_signals.enabled(): a quoted "false" never switches it on."""
     return _truthy((cfg or load_config()).get("enabled"))
@@ -1939,11 +1950,14 @@ def run(token: str, force: bool = False, dry_run: bool = False, now_ms: int | No
             _save_rows(batch_id, rows, now)
 
     try:
-        profile = build_profile(now, cfg, fb_summary)
+        profile_now = taste_now(now, cfg)      # away → profile seeded from the last listening window
+        profile = build_profile(profile_now, cfg, fb_summary)
         detail["profile"] = {"favourites": len(profile["favourite_artists"]), "worked": len(profile["worked"]),
                              "didnt_work": len(profile["didnt_work"]), "library": len(profile["library_artists"]),
                              "more_from": len(profile["more_from"]), "do_not_suggest": len(profile["do_not_suggest"]),
                              "input_days": input_days(cfg)}
+        if profile_now != now:
+            detail["profile"]["taste_anchor_ms"] = profile_now
         trim: dict = {}
         messages = build_messages(profile, cfg, angle, close_share, trim)
         detail["profile"]["prompt_chars"] = sum(len(m["content"]) for m in messages)

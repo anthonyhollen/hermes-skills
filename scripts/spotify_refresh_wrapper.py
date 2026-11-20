@@ -98,6 +98,16 @@ def main():
             msg += f"\n\n⚠️ {n}/{target} tracks — not enough eligible tracks to fill the playlist"
         if result.get("llm_note"):   # v2.19: DeepSeek supply failed / stale (never model text)
             msg += f"\n\nℹ️ {result['llm_note']}"
+        if result.get("inactive"):   # v2.25: no play in the whole scoring window
+            t = result.get("taste_anchor_ms")
+            when = ""
+            if isinstance(t, int):
+                sgt = timezone(timedelta(hours=8))
+                when = " since " + datetime.fromtimestamp(t / 1000, sgt).strftime("%-d %b")
+            extra = result.get("history_fill") or 0
+            msg += (f"\n\nℹ️ No listening{when} — playlist built from your last known "
+                    f"favourites, no new music"
+                    + (f" ({extra} topped up from your likes history)" if extra else "") + ".")
         print(msg)
         return 0
     # Ran to completion but the refresh reported a problem (e.g. composer_empty).

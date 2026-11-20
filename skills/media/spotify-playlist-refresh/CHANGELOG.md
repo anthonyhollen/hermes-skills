@@ -1,5 +1,42 @@
 # Changelog — spotify-playlist-refresh
 
+## 2.25.0 — 2026-11-21 (away mode: last known taste fills the playlist)
+
+The user is on vacation and not listening; the 7-day scoring window went empty
+and the 03:00 refresh wrote **27/40** (`scores_computed: 0`, no core
+favourites — the fill came from DeepSeek leftovers). Requirement (user
+2026-11-21): if the refresh cannot fill the playlist, use the last known liked
+songs — and while away, fill all 40 from known favourites, **no new music**.
+
+- **`scorer.taste_anchor()`** — no play in the whole scoring window
+  (`WINDOW_DAYS` 7) → anchor the scoring clock at the last recorded play and
+  return `inactive=True`. Active listeners are unchanged. No play history at
+  all → real now, not inactive.
+- **Away mode (`composer.compose_playlist(..., inactive=True)`)** — the 24 + 16
+  mix becomes `TARGET_SIZE` (40) last-known favourites in weighted-random
+  order, with the usual guardrails (blocklist, cooldown, live/Inst./remix
+  filters, combined 4-per-artist cap). No discovery / DeepSeek / wildcard
+  reads; no token needed.
+- **Last known liked fallback** — when the pool is still short (normal mode
+  too), top up with tracks liked (affinity ≥ 1.0) in any `affinity_snapshot`
+  of the last 90 days, most recently liked first (`db.get_historical_likes`).
+  It slots after current likes, before neutral / leftover candidates.
+- **DeepSeek profile anchor** — `llm_discovery.taste_now()` anchors the 14-day
+  profile at the last play once the whole input window is silent, so the nightly
+  batch stays seeded by the last known taste (its picks go unused while away).
+- **Honest banner** — the refresh wrapper appends "No listening since <date> —
+  playlist built from your last known favourites, no new music (n topped up
+  from your likes history)."
+- **Verified on today's DB:** 89 scored / 36 liked at the anchor (13 Nov
+  13:00) vs 0 at real now; compose = 40 (36 core + 4 history), unique IDs,
+  ≤ 2 per artist, no llm/wildcard. Full refresh exercised on a DB copy with a
+  faked playlist PUT: 40/40, `inactive: true`, `taste_anchor_ms`,
+  `history_fill: 4`.
+- **Tests:** new `scripts/test_taste_anchor.py` (12 checks: empty DB, 10-day
+  gap → anchor, likes at the anchor, snapshot-history ordering, away compose
+  has no new music, one recent play → active, active compose smoke). Existing
+  suites pass: 362 llm-discovery, 120 filters, 98 skip-signals.
+
 ## 2.24.0 — 2026-10-15 (taste rules: upbeat, female-led — "slow songs + driving = sleepy")
 
 The user explained the rising skip rate: low-BPM songs ("slow songs + driving =
