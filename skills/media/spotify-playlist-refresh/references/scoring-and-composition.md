@@ -104,9 +104,13 @@ either boundary.
 > ≤30-day releases**, read from `llm_pick` by `composer._llm_candidates` (no API
 > calls; one song per new artist; shortfall → fallback liked → neutral; banner
 > note when the batch failed / is stale), then reordered by `new_music_layout:
-> mix` (positions 1–3 core, the 16 new songs spread through the rest). v2.20:
+> mix` (positions 1–3 favourites, the 16 new songs spread through the rest). v2.20:
 > up to 3 of the 12 llm slots go to `encore`s — finished, never-skipped DeepSeek
 > songs — placed first in the new-music block.
+> **v2.25.1:** favourites for the layout are `core` **and** `fallback` — right
+> after a listening break the core section is empty and every favourite arrives
+> via the fallback fill; counting only `core` collapsed the mix into a block of
+> new songs at positions 1–N. Ordering lives in `composer._apply_layout()`.
 > `_pick_discoveries` / `_pick_wildcards` / the artist graph below run only when
 > the flag is off (then the llm slots go to discovery: exact v2.18). See
 > `references/llm-discovery.md`.

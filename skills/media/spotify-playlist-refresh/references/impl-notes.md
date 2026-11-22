@@ -66,6 +66,37 @@ playlist = composer.compose_playlist(scores, dry_run=True)
 for t in playlist: print(t['source'], t['name'])
 ```
 
+### Layout changes — verify offline, no API calls
+
+`composer._apply_layout(pool, inactive, use_llm)` is a pure reorder, so a layout
+change can be checked against a stored playlist without touching Spotify or the
+rate-limit budget: read the day's rows from `playlist_version_track`
+(`position, track_id, source, name`), pass them through `_apply_layout`, and
+compare the new-song positions. Run the snippet from a scratch file with
+`~/.hermes/scripts/.venv-scripts/bin/python3` (PyYAML); keep the DB path inside
+the script, not on the command line, or the gateway's scan guard can refuse it.
+Check the invariant the user cares about: new songs spread, never a block at the
+top where a resumed listener never reaches them.
+
+### Test suites
+
+Run all five before trusting a composer / scoring / layout change:
+
+```bash
+cd ~/.hermes/skills/media/spotify-playlist-refresh
+for t in test_new_music_layout test_taste_anchor test_track_name_filters test_skip_signals test_llm_discovery; do
+  ~/.hermes/scripts/.venv-scripts/bin/python3 -u scripts/$t.py >/tmp/$t.out 2>&1 \
+    && echo "$t ok" || { echo "$t FAIL"; tail -5 /tmp/$t.out; }
+done
+```
+
+A suite that fails only at certain times of day is a **test** bug, not the
+environment: `llm_discovery.run()` refuses to start inside 02:50–03:25 (the 03:00
+refresh owns the rate budget), so a suite that calls it on the real clock fails
+every night at exactly the hour cron work happens. Stub
+`llm_discovery._in_refresh_window` for the batch section and restore it for the
+guard's own checks; never wave a red suite through as "environmental".
+
 ### Full refresh on a DB copy (no live write)
 
 `dry_run=True` covers compose only. To exercise `refresher.refresh_playlist()`

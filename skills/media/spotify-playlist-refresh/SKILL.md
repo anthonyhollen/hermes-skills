@@ -1,7 +1,7 @@
 ---
 name: spotify-playlist-refresh
 description: "Spotify playlist refresh: affinity-based scoring → 40-track daily playlist (24 favourites + 16 DeepSeek-picked new songs), with sampler-based skip detection (cooldown/demotion). Spec-compliant implementation in ~/.hermes/skills/media/spotify-playlist-refresh/spotify-refresh/"
-version: 2.25.0
+version: 2.25.1
 platforms: [linux]
 prerequisites:
   python: "3.11+"
@@ -83,7 +83,7 @@ that block in any new wrapper (see CHANGELOG 2.23.1).
 ```
 Skill root: `scripts/test_track_name_filters.py` (filter suite),
 `scripts/test_skip_signals.py` (+ `scripts/fixtures/`, skip-detection suite),
-`scripts/test_taste_anchor.py` (away mode / last-known taste), `references/`.
+`scripts/test_taste_anchor.py`, `scripts/test_new_music_layout.py`, `references/`.
 Wrappers live in `~/.hermes/scripts/` (not the skill dir).
 
 ## How it works (summary — detail in references)

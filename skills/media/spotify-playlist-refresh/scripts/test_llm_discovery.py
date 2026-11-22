@@ -363,6 +363,12 @@ L._search, L._paced_get, composer._fetch_album_tracks = fake_search, fake_paced_
 client.get_user_market = lambda token=None: "SG"
 L.load_config = (lambda base=L.load_config: (lambda: dict(base(), enabled=True)))()
 noon = int(time.mktime(time.strptime("2026-10-07 12:00", "%Y-%m-%d %H:%M"))) * 1000   # local time
+# run() refuses to start inside 02:50–03:25 (the 03:00 refresh owns the rate
+# budget). That guard is real, so stub it for the batch section — otherwise the
+# suite fails on the wall clock for 35 min every night — and restore it for the
+# explicit guard checks further down.
+_irw = L._in_refresh_window
+L._in_refresh_window = lambda *a, **k: False
 r = L.run("tok", now_ms=None, daytime=True)
 check("run ok", r["status"] == "ok", r)
 with db.get_conn() as conn:
@@ -399,6 +405,7 @@ check("stale lease → killed; LLM failure → partial", statuses == ["ok", "kil
 check("partial still scanned releases", "new-release" in r4["summary"], r4["summary"])
 sgt = lambda hhmm: int(__import__("datetime").datetime.strptime(f"2026-10-07 {hhmm}", "%Y-%m-%d %H:%M")
                       .replace(tzinfo=L.SGT).timestamp() * 1000)
+L._in_refresh_window = _irw
 check("02:55 SGT blocked", L._in_refresh_window(sgt("02:55")))
 check("03:30 SGT allowed", not L._in_refresh_window(sgt("03:30")))
 check("01:20 SGT allowed", not L._in_refresh_window(sgt("01:20")))
@@ -502,7 +509,7 @@ check("sources 24/12/1+ (store has 15 picks, 2 releases)",
 check("mix: first 3 favourites", src[:3] == ["core"] * 3, src[:6])
 check("mix: position 4 is a new song", src[3] in ("llm", "wildcard"), src[:6])
 check("mix: new songs spread (none of the last 10 runs > 2 in a row)",
-      max(len(r) for r in "".join("N" if s != "core" else " " for s in src).split()) <= 2, src)
+      max(len(r) for r in "".join("N" if s in ("llm", "wildcard", "encore") else " " for s in src).split()) <= 2, src)
 new_artists = [composer._primary_artist(t) for t in pl if t["source"] in ("llm", "wildcard")]
 check("one song per new artist", len(new_artists) == len(set(new_artists)))
 check("no note when the latest batch is ok but supply is short", composer.LAST_INFO.get("note") is None,

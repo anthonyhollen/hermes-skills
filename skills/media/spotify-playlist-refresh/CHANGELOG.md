@@ -1,5 +1,35 @@
 # Changelog — spotify-playlist-refresh
 
+## 2.25.1 — 2026-11-23 (mix layout survives a thin core section)
+
+Reported: "why didn't the DeepSeek report run? I did listen to the playlist the
+last 2 days." The 23:30 job ran fine both nights and stayed silent because it
+had **zero DeepSeek verdicts** — and the reason was a layout bug, not taste.
+
+- **Root cause** — after the 13–21 Nov listening gap the scoring window was
+  thin, so the 22 Nov compose had no `core` tracks: all 28 favourites arrived
+  via the fallback fill (`source: fallback`). `compose_playlist` counted only
+  `core` as a favourite for the layout, so the mix branch ran
+  `_spread([], new + rest)` → `[] + [new…] + [favs…]`, i.e. the 12 DeepSeek
+  picks sat in a block at **positions 1–12** (version 56). The listener's
+  playback resumed at position ~13 and ran through the favourites; not one new
+  song was played, so `llm_report.build_report()` returned "" (by design) and
+  the report was silent. Same block appears in versions 53/54 (thin windows).
+- **Fix** — new `composer._apply_layout(pool, inactive, use_llm)` (the ordering
+  moved out of `compose_playlist` so it is testable). Favourites = `core` **and**
+  `fallback`; `rest` keeps discovery/unknown sources. Re-running yesterday's
+  pool through it puts the picks at 4, 7, 10, 13, 16, 19, 23, 26, 29, 32, 35, 38
+  — six of them inside the block the user actually played.
+- **Tests** — new `scripts/test_new_music_layout.py` (20 checks: empty core,
+  healthy core, wildcards, block layout, away mode, permutation integrity;
+  asserts "new songs not a block at the top"). Existing suites pass: 362
+  llm-discovery, 120 filters, 98 skip-signals, 12 taste-anchor.
+- **Test robustness** — `test_llm_discovery.py` called `L.run()` on the real
+  clock, so it failed whenever it ran inside the 02:50–03:25 start guard. The
+  guard is stubbed for the batch section and restored for its own checks; the
+  suite now passes at any hour. Its spread check counts only
+  llm/wildcard/encore as "new" (fallback is a favourite).
+
 ## 2.25.0 — 2026-11-21 (away mode: last known taste fills the playlist)
 
 The user is on vacation and not listening; the 7-day scoring window went empty

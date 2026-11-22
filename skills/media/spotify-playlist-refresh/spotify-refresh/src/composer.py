@@ -588,12 +588,6 @@ def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False,
     if inactive:
         LAST_INFO = {"inactive": True, "favourites": len(core), "fav_pool": len(liked),
                      "history_fill": history_filled, "layout": NEW_MUSIC_LAYOUT, "note": None}
-        favs = [t for t in pool if t.get("source") == "core"]
-        rest = [t for t in pool if t.get("source") != "core"]
-        if NEW_MUSIC_LAYOUT == "mix":
-            pool = favs[:MIX_LEAD_CORE] + _spread(favs[MIX_LEAD_CORE:], rest, lead_extra=True)
-        else:
-            pool = favs + rest
     elif use_llm:
         LAST_INFO = {"llm": len(llm), "more_from": sum(1 for t in llm if t.get("_more_from")),
                      "encore": len(encore), "llm_target": LLM_COUNT, "wildcard": len(wildcard),
@@ -601,21 +595,40 @@ def compose_playlist(affinity_scores: dict[str, float], dry_run: bool = False,
                      "release_pool": len(wild_cands), "batch_status": llm_status.get("status"),
                      "batch_age_h": llm_status.get("age_h"), "layout": NEW_MUSIC_LAYOUT,
                      "note": _llm_note(len(llm) + len(encore), len(wildcard), llm_status)}
-        new_src = ("encore", "llm", "wildcard")
+    return _apply_layout(pool, inactive=inactive, use_llm=use_llm)
+
+
+def _apply_layout(pool: list[dict], inactive: bool = False, use_llm: bool = False) -> list[dict]:
+    """Order the final pool: favourites and new songs, mix or block layout.
+
+    Favourites are ``core`` tracks **and** anything the fallback fill supplied
+    (``fallback``). Right after a listening break the scoring window is thin, so
+    the core section can be empty and every favourite arrives as ``fallback``;
+    counting only ``core`` as a favourite collapsed the mix layout into a block
+    of new songs at the top, which a listener resuming mid-playlist never
+    reaches (22 Nov: 12 DeepSeek picks at positions 1–12, zero played).
+    """
+    new_src = ("encore", "llm", "wildcard")
+    if inactive:
         favs = [t for t in pool if t.get("source") == "core"]
-        rest = [t for t in pool if t.get("source") not in ("core",) + new_src]
-        if NEW_MUSIC_LAYOUT != "mix":
-            pool = (favs + [t for t in pool if t.get("source") in ("encore", "llm")]
-                    + [t for t in pool if t.get("source") == "wildcard"] + rest)
-        else:
-            # Positions 1–MIX_LEAD_CORE favourites, then every new song (DeepSeek
-            # picks with the new releases spread through them, then any fallback
-            # fill) spread evenly through the remaining favourites. A pure reorder:
-            # playlist_version stores the final order, so skip inference holds.
-            new = _spread([t for t in pool if t.get("source") in ("encore", "llm")],   # encores first
-                          [t for t in pool if t.get("source") == "wildcard"])
-            pool = favs[:MIX_LEAD_CORE] + _spread(favs[MIX_LEAD_CORE:], new + rest, lead_extra=True)
-    return pool
+        rest = [t for t in pool if t.get("source") != "core"]
+        if NEW_MUSIC_LAYOUT == "mix":
+            return favs[:MIX_LEAD_CORE] + _spread(favs[MIX_LEAD_CORE:], rest, lead_extra=True)
+        return favs + rest
+    if not use_llm:
+        return pool
+    favs = [t for t in pool if t.get("source") in ("core", "fallback")]
+    rest = [t for t in pool if t.get("source") not in ("core", "fallback") + new_src]
+    if NEW_MUSIC_LAYOUT != "mix":
+        return (favs + [t for t in pool if t.get("source") in ("encore", "llm")]
+                + [t for t in pool if t.get("source") == "wildcard"] + rest)
+    # Positions 1–MIX_LEAD_CORE favourites, then every new song (DeepSeek picks
+    # with the new releases spread through them, then any fallback fill) spread
+    # evenly through the remaining favourites. A pure reorder: playlist_version
+    # stores the final order, so skip inference holds.
+    new = _spread([t for t in pool if t.get("source") in ("encore", "llm")],   # encores first
+                  [t for t in pool if t.get("source") == "wildcard"])
+    return favs[:MIX_LEAD_CORE] + _spread(favs[MIX_LEAD_CORE:], new + rest, lead_extra=True)
 
 
 def _pick_core_favorites(liked: list[tuple[str, float]]) -> list[dict]:
