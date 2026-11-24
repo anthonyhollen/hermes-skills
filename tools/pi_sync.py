@@ -26,7 +26,7 @@ Safety rules:
     keep it as <file>.bak-pisync-<ts>. Live file modes are preserved.
   - Skips the run if a live file with an un-synced change was modified < 60 s ago.
 
-Usage: pi_sync.py [--dry-run] [--no-alert] [-v] [--self-test]
+Usage: pi_sync.py [--dry-run] [--no-alert] [--no-error-alert] [-v] [--self-test]
 """
 import argparse
 import fcntl
@@ -168,7 +168,7 @@ def post_discord(text):
 
 def alert(state, key, text, enabled=True):
     """Post to Discord once per key per ALERT_REPEAT_S."""
-    log("ALERT " + text.replace("\n", " | "))
+    log(("ALERT " if enabled else "ALERT (not posted) ") + text.replace("\n", " | "))
     if not enabled:
         return
     sent = state.setdefault("alerts", {})
@@ -606,6 +606,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="report live edits; change nothing")
     ap.add_argument("--no-alert", action="store_true", help="log alerts/notices instead of posting")
+    ap.add_argument("--no-error-alert", action="store_true",
+                    help="log a retryable sync error but do not post it (cron retries first)")
     ap.add_argument("--self-test", action="store_true", help="read-only smoke test, then exit")
     ap.add_argument("-v", action="store_true", help="print the log to stdout")
     args = ap.parse_args()
@@ -627,7 +629,10 @@ def main():
             rc = run(args)
         except Exception as e:
             state = load_state()
-            alert(state, "error", f"sync error: {e}"[:600], not args.no_alert)
+            # Retryable failure: the crontab retries this pass, so only the last
+            # attempt posts. A blip that heals inside the retry window sends nothing.
+            alert(state, "error", f"sync error: {e}"[:600],
+                  not args.no_alert and not args.no_error_alert)
             save_state(state)
             return 2
         if rc == 0 and not args.dry_run:
