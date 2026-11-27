@@ -100,7 +100,10 @@ Wrappers live in `~/.hermes/scripts/` (not the skill dir).
     (≤ 30-day releases by DeepSeek-named similar artists);
   - `mix` layout (1–3 favourites, new songs spread through the rest);
   - every guardrail applied while picking (`_Picker`).
-  Short → favourites fill the gap and the banner says `⚠️ n/40`.
+  Short → favourites fill the gap and the banner says `⚠️ n/40`. The fallback
+  fill (remaining liked → 90-day `affinity_snapshot` likes → neutral →
+  leftover candidates) runs in **normal mode too**: a `source: fallback` slot
+  is not evidence of away mode — read `run_log.detail.inactive` first.
   `llm_discovery.enabled: false` = the v2.18 artist graph.
 - **Away mode (v2.25, user 2026-11-21)** — no play in the 7-day window
   (vacation / travel): score the last active 7 days (`scorer.taste_anchor`) and
@@ -210,6 +213,11 @@ API call.
   `references/troubleshooting.md` (sqlite one-liners).
 - **Check recent runs** — `SELECT * FROM run_log ORDER BY run_id DESC LIMIT 10`
   (query in `references/troubleshooting.md`).
+- **"Why did the playlist barely change?"** — check `inactive` first (away mode
+  needs a silent 7-day window), then the distinct-track count in that window,
+  the `fallback` share, and `llm_pool` vs `llm_target` (repeated picks). Full
+  order + queries: `references/troubleshooting.md` → "Playlist barely changed
+  day over day".
 - **Answer "what did I skip this morning?"** — rebuild signals first (refreshed
   only on poll / the 23:30 report / refresh): from `src/`,
   `python3 -c "import db, skip_signals as ss; db.init_db(); print(ss.rebuild_signals())"`,
@@ -232,7 +240,7 @@ API call.
 | `references/filters.md` | output filters, category + album exclusions, adding a filter, regex/patch pitfalls |
 | `references/schema.md` | SQLite tables, run_log detail shapes, config.yaml (what is / isn't read) |
 | `references/cron-wrappers.md` | cron jobs + IDs, wrapper behavior/output, token source, re-auth, scopes |
-| `references/troubleshooting.md` | a run misbehaves: underfill, null playlist reads, unplayable tracks, 5xx, events_stored, run_log errors, a silent skip report, backups |
+| `references/troubleshooting.md` | a run misbehaves: underfill, playlist stasis / repeated picks, null playlist reads, unplayable tracks, 5xx, events_stored, run_log errors, a silent skip report, backups |
 | `references/feb-2026-api-audit.md` | before touching any Spotify API call |
 | `references/wildcard-rate-limit.md` | wildcard fill / album-endpoint rate limits |
 | `references/impl-notes.md` | composer fixes, verification commands (incl. full-refresh copy test) |

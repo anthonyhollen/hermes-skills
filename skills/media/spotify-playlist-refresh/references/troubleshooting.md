@@ -6,6 +6,22 @@ Symptom → root cause → fix for the common failure modes.
 ### "Only N tracks composed (target: 40)"
 Printed to **stderr** by the composer (the refresh wrapper's Discord banner then appends `⚠️ N/40 tracks — not enough eligible tracks to fill the playlist`). Since v2.17.0 guardrails are applied while picking, and the fallback fills liked → last known liked (90-day snapshot) → neutral → leftover discovery/wildcard candidates, so a short playlist means the eligible supply is genuinely exhausted (e.g. a rate-limited cold artist graph, or fewer than 40 eligible likes in the window + 90-day history). **A listening break no longer underfills** (v2.25): no play in the 7-day window → `run_log.detail.inactive: true`, the last play anchors the scores, and all 40 come from last known favourites (no new music). Check `inactive` / `taste_anchor_ms` / `history_fill` in the run detail before diagnosing further. After 2–3 days of polling, more events accumulate and composition improves. Offline on the 2026-09-23 DB: 40/40 on every one of 100 seeds.
 
+### "Playlist barely changed" day over day (stasis) — check the inputs before the composer
+**Symptom:** the refresh writes 40 tracks but only a handful differ from yesterday, and the user reports the last-known-liked fill running while they have been listening. Diagnose in this order; the first two steps usually move the blame off the composer.
+
+1. **Is away mode actually on?** Read `inactive` / `taste_anchor_ms` / `history_fill` from the latest refresh `run_log.detail`. `inactive: false` means the away path never ran — the `source: fallback` slots are the **normal-mode** top-up (remaining liked → 90-day `affinity_snapshot` likes → neutral → leftover candidates), which fires whenever core + new music fall short of 40. `inactive` is true only when there is **no play in the entire 7-day window**; one play restores the normal 24 + 16 mix.
+2. **Is the scored universe just the playlist?**
+   ```sql
+   SELECT COUNT(*) plays, COUNT(DISTINCT track_id) tracks FROM play_events
+   WHERE played_at >= <now_ms - 7d*86400e3>;   -- played_at is unix MILLISECONDS
+   ```
+   Distinct tracks ≈ playlist size means the listener only plays the playlist: the scorer can rank those ~40 and nothing else, core cannot fill its 24, and the history top-up supplies the rest. That is **input starvation**, not a fill bug — the 90-day history pool is static, so the only durable fixes are listening outside the playlist or changing the pool rules.
+3. **Quantify the churn, then break it down by source.** Diff adjacent `playlist_version_track` sets: `added = set(v_n) - set(v_{n-1})`. If added is 2–4 while `llm` is 7, most "new" tracks were already there yesterday. The `source` mix per version tells you which section is exhausted.
+4. **Check `llm_pool` vs `llm_target` in the refresh detail.** Pool < target (e.g. 10 vs 12) means every eligible DeepSeek pick is used every night. A pick the user never plays never becomes `heard`, so it never leaves the pool — one song can occupy a slot for a week and be re-proposed by several batches. Confirm with `SELECT batch_id, status, created_at FROM llm_pick WHERE track_id=?` (many batches, all `resolved`, no play) and its positions across `playlist_version_track`.
+5. **Check the discovery yield, not just the pool.** `SELECT status, reason, COUNT(*) FROM llm_pick WHERE batch_id=? GROUP BY 1,2`. A large `known_artist` share is routine for a long-history listener and starves the pool. `release_pool: 0` is genuine supply when the newest `release_date` across `release_scan.albums` is older than the wildcard window (30 days) — compare before treating it as an API failure.
+
+Report the churn as a number (tracks added per day, before vs now) so "barely changed" is measurable. Once the cause is supply/design (thin window, pool < target, no new releases), say so and offer the levers — gate the history top-up to away mode, keep already-served picks out of the eligible pool, or relax the known-artist gate — and let the user choose before changing composer behaviour.
+
 **Blocklist tracks never re-enter playlist**
 Correct behavior — permanent blocklist per spec §5.5. (Before blaming the user's taste, note that bans issued before 2026-09-23 came from the backwards ms_played inference — all 6 then present were lifted by the v2.17.0 migration.) To manually unblock:
 ```bash
